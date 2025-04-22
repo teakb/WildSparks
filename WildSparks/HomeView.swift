@@ -13,234 +13,342 @@ struct HomeView: View {
     @ObservedObject var profile = UserProfile()
     @State private var showingAgePopup = false
     @State private var showingEthnicityPopup = false
+    @State private var showingRadiusPopup = false
+    @State private var selectedRadius: Double = 160.0
 
     var body: some View {
         NavigationStack {
-            GeometryReader { geo in
-                ZStack(alignment: .top) {
-                    VStack(spacing: 12) {
-                        // ✅ Location + Filter Pills
-                        VStack(spacing: 12) {
-                            HStack {
-                                Image(systemName: "location.fill")
-                                    .foregroundColor(.green)
-                                Text("Location Sharing: On")
+            ZStack {
+                LinearGradient(
+                    gradient: Gradient(colors: [Color(.systemBackground), Color(.secondarySystemBackground)]),
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .edgesIgnoringSafeArea(.all)
+
+                VStack(spacing: 16) {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) {
+                            Button {
+                                showingAgePopup = true
+                            } label: {
+                                Text("Age \(profile.preferredAgeRange.lowerBound)–\(profile.preferredAgeRange.upperBound)")
                                     .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(.ultraThinMaterial)
+                                    .clipShape(Capsule())
                             }
 
-                            HStack(spacing: 12) {
-                                Button(action: { showingAgePopup = true }) {
-                                    Text("Age: \(profile.preferredAgeRange.lowerBound)–\(profile.preferredAgeRange.upperBound)")
-                                        .font(.subheadline)
-                                        .foregroundColor(.blue)
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 6)
-                                        .background(Color.blue.opacity(0.1))
-                                        .cornerRadius(20)
-                                }
+                            Button {
+                                showingEthnicityPopup = true
+                            } label: {
+                                let eth = profile.preferredEthnicities.isEmpty ? "Any" : profile.preferredEthnicities.joined(separator: ", ")
+                                Text("Ethnicity: \(eth)")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(.ultraThinMaterial)
+                                    .clipShape(Capsule())
+                            }
 
-                                Button(action: { showingEthnicityPopup = true }) {
-                                    let eth = profile.preferredEthnicities.isEmpty ? "Any" : profile.preferredEthnicities.joined(separator: ", ")
-                                    Text("Ethnicity: \(eth)")
-                                        .font(.subheadline)
-                                        .foregroundColor(.blue)
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 6)
-                                        .background(Color.blue.opacity(0.1))
-                                        .cornerRadius(20)
-                                }
+                            Button {
+                                showingRadiusPopup = true
+                            } label: {
+                                Text("Radius: \(formattedMiles(from: selectedRadius))")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(.ultraThinMaterial)
+                                    .clipShape(Capsule())
                             }
                         }
-                        .padding(.top, 8)
+                        .padding(.horizontal)
+                    }
 
-                        // ✅ Nearby Sparks
-                        Text("Nearby Sparks")
-                            .font(.headline)
-                            .padding(.top, 4)
+                    Text("Nearby Sparks")
+                        .font(.title2.weight(.bold))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal)
 
-                        // ✅ No Location
+                    Group {
                         if locationManager.currentLocation == nil {
-                            Text("We need your location to find nearby sparks!")
-                                .multilineTextAlignment(.center)
-                                .padding()
-
-                            Button("Allow Location Access") {
-                                requestLocationPermission()
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .alert("Location Required", isPresented: $showingLocationPrompt) {
-                                Button("Settings") {
-                                    if let url = URL(string: UIApplication.openSettingsURLString) {
-                                        UIApplication.shared.open(url)
-                                    }
+                            VStack(spacing: 16) {
+                                Image(systemName: "location.slash")
+                                    .font(.largeTitle)
+                                    .foregroundColor(.gray)
+                                Text("Enable location to find sparks near you")
+                                    .multilineTextAlignment(.center)
+                                Button("Allow Access") {
+                                    requestLocationPermission()
                                 }
-                                Button("Cancel", role: .cancel) { }
-                            } message: {
-                                Text("WildSpark needs location access to find nearby users. Please enable it in Settings.")
+                                .buttonStyle(.borderedProminent)
                             }
-                        }
-                        // ✅ No nearby users
-                        else if nearbyUsers.isEmpty {
-                            Text("No sparks nearby...")
+                            .padding()
+                            .background(.thinMaterial)
+                            .cornerRadius(16)
+                            .padding(.horizontal)
+                        } else if nearbyUsers.isEmpty {
+                            VStack {
+                                Spacer()
+                                VStack(spacing: 12) {
+                                    Image(systemName: "sparkles")
+                                        .font(.largeTitle)
+                                        .foregroundColor(.gray)
+                                    Text("No sparks nearby…")
+                                }
                                 .padding()
-                        }
-                        // ✅ Show nearby users
-                        else {
+                                .background(.thinMaterial)
+                                .cornerRadius(16)
+                                .padding(.horizontal)
+                                Spacer()
+                            }
+                        } else {
                             ScrollView {
-                                VStack(spacing: 16) {
+                                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 20) {
                                     ForEach(nearbyUsers) { user in
-                                        VStack(spacing: 8) {
-                                            if let image = user.profileImage {
-                                                Image(uiImage: image)
-                                                    .resizable()
-                                                    .scaledToFill()
-                                                    .frame(width: 80, height: 80)
-                                                    .clipShape(Circle())
-                                                    .onTapGesture {
-                                                        selectedUser = user
-                                                        showProfileCard = true
-                                                    }
+                                        ZStack(alignment: .bottom) {
+                                            ZStack(alignment: .topTrailing) {
+                                                if let image = user.profileImage {
+                                                    Image(uiImage: image)
+                                                        .resizable()
+                                                        .scaledToFill()
+                                                        .frame(width: 160, height: 280)
+                                                        .clipShape(RoundedRectangle(cornerRadius: 24))
+                                                        .onTapGesture {
+                                                            selectedUser = user
+                                                            showProfileCard = true
+                                                        }
+                                                } else {
+                                                    RoundedRectangle(cornerRadius: 24)
+                                                        .fill(Color.gray.opacity(0.3))
+                                                        .frame(width: 160, height: 280)
+                                                }
+
+                                                Button(action: {
+                                                    likeUser(user)
+                                                }) {
+                                                    Image(systemName: likedUserIDs.contains(user.id) ? "heart.fill" : "heart")
+                                                        .resizable()
+                                                        .scaledToFit()
+                                                        .frame(width: 26, height: 26)
+                                                        .padding(10)
+                                                        .foregroundColor(likedUserIDs.contains(user.id) ? .red : .white)
+                                                }
+                                                .disabled(likedUserIDs.contains(user.id))
                                             }
 
-                                            Text(user.name)
-                                                .font(.headline)
-
-                                            Button(likedUserIDs.contains(user.id) ? "Liked" : "Like") {
-                                                likeUser(user)
-                                            }
-                                            .disabled(likedUserIDs.contains(user.id))
-                                            .buttonStyle(.borderedProminent)
+                                            Text("\(user.name)\(user.fullProfile["age"].flatMap { ", \($0)" } ?? "")")
+                                                .foregroundColor(.white)
+                                                .font(.subheadline.weight(.medium))
+                                                .padding(.vertical, 4)
+                                                .frame(width: 160)
+                                                .background(Color.black.opacity(0.5))
+                                                .clipShape(RoundedRectangle(cornerRadius: 24))
+                                                .padding(.bottom, 4)
                                         }
-                                        .padding()
-                                        .frame(maxWidth: .infinity)
-                                        .background(Color.white)
-                                        .cornerRadius(12)
-                                        .shadow(radius: 3)
-                                        .padding(.horizontal)
                                     }
                                 }
-                                .padding(.vertical)
+                                .padding(.horizontal)
+                                .padding(.vertical, 8)
                             }
                         }
-
-                        // ✅ Simulate Users
-                        Button("👥 Simulate Nearby Users") {
-                            simulateNearbyUsers()
-                        }
-                        .padding()
-                        .background(Color.blue)
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
                     }
+
+                    Spacer()
+
+                    Button(action: simulateNearbyUsers) {
+                        Label("Simulate Users", systemImage: "person.3.fill")
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                    }
+                    .buttonStyle(.borderedProminent)
                     .padding(.horizontal)
+                    .padding(.bottom)
+                }
+                .onAppear {
+                    checkLocationAndFetch()
+                    requestPushPermission()
+                    subscribeToNewMessages()
+                    subscribeToNewLikes()
+                    loadProfile()
+                }
+                .onChange(of: locationManager.currentLocation) { _ in
+                    fetchNearbyUsers()
+                }
 
-                    // 👇 Age Popup
-                    if showingAgePopup {
-                        VStack(spacing: 16) {
-                            Text("Preferred Age Range")
-                                .font(.headline)
+                if showingRadiusPopup {
+                    VStack(spacing: 16) {
+                        Text("Search Radius")
+                            .font(.headline)
 
-                            HStack {
-                                Picker("Min", selection: Binding(
-                                    get: { profile.preferredAgeRange.lowerBound },
-                                    set: { profile.preferredAgeRange = $0...profile.preferredAgeRange.upperBound }
-                                )) {
-                                    ForEach(18...99, id: \.self) { Text("\($0)").tag($0) }
-                                }
-                                .pickerStyle(.wheel)
-
-                                Text("to")
-
-                                Picker("Max", selection: Binding(
-                                    get: { profile.preferredAgeRange.upperBound },
-                                    set: { profile.preferredAgeRange = profile.preferredAgeRange.lowerBound...$0 }
-                                )) {
-                                    ForEach(18...100, id: \.self) { Text("\($0)").tag($0) }
-                                }
-                                .pickerStyle(.wheel)
-                            }
-
-                            Button("Done") {
-                                showingAgePopup = false
-                                saveBracketPreferences()
-                                fetchNearbyUsers()
-                            }
-                            .buttonStyle(.borderedProminent)
+                        Slider(value: $selectedRadius, in: 30.48...80467.2, step: 10) {
+                            Text("Radius")
+                        } minimumValueLabel: {
+                            Text("100ft")
+                        } maximumValueLabel: {
+                            Text("50mi")
                         }
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(.ultraThinMaterial)
-                        .cornerRadius(16)
-                        .padding()
+
+                        Text("\(formattedMiles(from: selectedRadius)) radius")
+
+                        Button("Done") {
+                            showingRadiusPopup = false
+                            fetchNearbyUsers()
+                        }
+                        .buttonStyle(.borderedProminent)
                     }
+                    .padding()
+                    .background(.ultraThinMaterial)
+                    .cornerRadius(16)
+                    .padding()
+                }
 
-                    // 👇 Ethnicity Popup
-                    if showingEthnicityPopup {
-                        VStack(spacing: 16) {
-                            Text("Preferred Ethnicities")
-                                .font(.headline)
-
-                            TextField("e.g. White, Latino", text: Binding(
-                                get: { profile.preferredEthnicities.joined(separator: ", ") },
-                                set: { profile.preferredEthnicities = $0.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) } }
-                            ))
-                            .textFieldStyle(RoundedBorderTextFieldStyle())
-
-                            Button("Done") {
-                                showingEthnicityPopup = false
-                                saveBracketPreferences()
-                                fetchNearbyUsers()
+                if showingAgePopup {
+                    VStack(spacing: 16) {
+                        Text("Preferred Age Range")
+                            .font(.headline)
+                        HStack {
+                            Picker("Min", selection: Binding(
+                                get: { profile.preferredAgeRange.lowerBound },
+                                set: { profile.preferredAgeRange = $0...profile.preferredAgeRange.upperBound }
+                            )) {
+                                ForEach(18...99, id: \.self) { Text("\($0)") }
                             }
-                            .buttonStyle(.borderedProminent)
+                            .pickerStyle(.wheel)
+
+                            Text("to")
+
+                            Picker("Max", selection: Binding(
+                                get: { profile.preferredAgeRange.upperBound },
+                                set: { profile.preferredAgeRange = profile.preferredAgeRange.lowerBound...$0 }
+                            )) {
+                                ForEach(18...100, id: \.self) { Text("\($0)") }
+                            }
+                            .pickerStyle(.wheel)
                         }
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(.ultraThinMaterial)
-                        .cornerRadius(16)
-                        .padding()
+                        Button("Done") {
+                            showingAgePopup = false
+                            saveBracketPreferences()
+                            fetchNearbyUsers()
+                        }
+                        .buttonStyle(.borderedProminent)
                     }
+                    .padding()
+                    .background(.ultraThinMaterial)
+                    .cornerRadius(16)
+                    .padding()
+                }
 
-                    // 👇 Profile Card Overlay
-                    if showProfileCard, let selected = selectedUser {
-                        VStack(spacing: 16) {
-                            if let image = selected.profileImage {
-                                Image(uiImage: image)
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(width: 150, height: 200)
-                                    .clipShape(RoundedRectangle(cornerRadius: 15))
+                if showingEthnicityPopup {
+                    VStack(spacing: 16) {
+                        Text("Preferred Ethnicities")
+                            .font(.headline)
+                        TextField("e.g. White, Latino", text: Binding(
+                            get: { profile.preferredEthnicities.joined(separator: ", ") },
+                            set: {
+                                profile.preferredEthnicities = $0
+                                    .split(separator: ",")
+                                    .map { $0.trimmingCharacters(in: .whitespaces) }
                             }
+                        ))
+                        .textFieldStyle(.roundedBorder)
 
-                            Text(selected.name)
-                                .font(.title2)
-                                .bold()
-
-                            Button("Close") {
-                                showProfileCard = false
-                            }
-                            .padding(.top, 8)
+                        Button("Done") {
+                            showingEthnicityPopup = false
+                            saveBracketPreferences()
+                            fetchNearbyUsers()
                         }
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(Color.white)
-                        .cornerRadius(20)
-                        .shadow(radius: 10)
-                        .padding()
+                        .buttonStyle(.borderedProminent)
+                    }
+                    .padding()
+                    .background(.ultraThinMaterial)
+                    .cornerRadius(16)
+                    .padding()
+                }
+
+                if showProfileCard, let user = selectedUser {
+                    ProfileCardView(user: user) {
+                        showProfileCard = false
                     }
                 }
-                .frame(width: geo.size.width, height: geo.size.height)
             }
             .navigationTitle("Nearby")
-            .onAppear {
-                checkLocationAndFetch()
-                requestPushPermission()
-                subscribeToNewMessages()
-                subscribeToNewLikes()
-                loadProfile()
-            }
-            .onChange(of: locationManager.currentLocation) { _ in fetchNearbyUsers() }
+            .tabItem { Label("Nearby", systemImage: "person.3") }
         }
-        .tabItem { Label("Nearby", systemImage: "person.3") }
+    }
+
+    func formattedMiles(from meters: Double) -> String {
+        let miles = meters / 1609.34
+        return String(format: "%.1fmi", miles)
+    }
+
+    func fetchNearbyUsers() {
+        guard let currentLocation = locationManager.currentLocation else { return }
+        let locationQuery = CKQuery(recordType: "UserLocation", predicate: NSPredicate(value: true))
+        CKContainer.default().publicCloudDatabase.perform(locationQuery, inZoneWith: nil) { locationRecords, _ in
+            guard let locationRecords = locationRecords else { return }
+
+            let nearbyUserIDs = locationRecords.compactMap { record -> String? in
+                guard let loc = record["location"] as? CLLocation,
+                      let userID = record["userID"] as? String else { return nil }
+                let distance = currentLocation.distance(from: loc)
+                return distance <= selectedRadius ? userID : nil
+            }
+
+            let references = nearbyUserIDs.map {
+                CKRecord.Reference(recordID: CKRecord.ID(recordName: "\($0)_location"), action: .none)
+            }
+
+            let profileQuery = CKQuery(recordType: "UserProfile", predicate: NSPredicate(format: "userReference IN %@", references))
+            CKContainer.default().publicCloudDatabase.perform(profileQuery, inZoneWith: nil) { profileRecords, _ in
+                guard let profileRecords = profileRecords else { return }
+
+                var results: [NearbyUser] = []
+
+                for record in profileRecords {
+                    guard let ref = record["userReference"] as? CKRecord.Reference else { continue }
+
+                    let id = ref.recordID.recordName
+                    let name = record["name"] as? String ?? "Unknown"
+
+                    var image: UIImage? = nil
+                    if let asset = record["photo1"] as? CKAsset,
+                       let url = asset.fileURL,
+                       let data = try? Data(contentsOf: url),
+                       let uiImage = UIImage(data: data) {
+                        image = uiImage
+                    }
+
+                    let visRaw = record["fieldVisibilities"] as? String ?? "{}"
+                    let visData = (try? JSONSerialization.jsonObject(with: Data(visRaw.utf8))) as? [String: String] ?? [:]
+
+                    var allData: [String: String] = [:]
+                    for key in record.allKeys() {
+                        if let str = record[key] as? String {
+                            allData[key] = str
+                        } else if let num = record[key] as? NSNumber {
+                            allData[key] = num.stringValue
+                        }
+                    }
+
+                    results.append(NearbyUser(
+                        id: id,
+                        name: name,
+                        profileImage: image,
+                        fullProfile: allData,
+                        fieldVisibilities: visData
+                    ))
+                }
+
+                DispatchQueue.main.async {
+                    nearbyUsers = results
+                }
+            }
+        }
     }
 
     func simulateNearbyUsers() {
@@ -413,60 +521,7 @@ func subscribeToNewMessages() {
     }
 
 
-    func fetchNearbyUsers() {
-        guard let currentLocation = locationManager.currentLocation else { return }
-        let locationQuery = CKQuery(recordType: "UserLocation", predicate: NSPredicate(value: true))
-        CKContainer.default().publicCloudDatabase.perform(locationQuery, inZoneWith: nil) { locationRecords, _ in
-            guard let locationRecords = locationRecords else { return }
 
-            let nearbyUserIDs = locationRecords.compactMap { record -> String? in
-                guard let loc = record["location"] as? CLLocation,
-                      let userID = record["userID"] as? String else { return nil }
-                let distance = currentLocation.distance(from: loc)
-                return distance <= 200 ? userID : nil
-            }
-
-            let references = nearbyUserIDs.map {
-                CKRecord.Reference(recordID: CKRecord.ID(recordName: "\($0)_location"), action: .none)
-            }
-
-            let profileQuery = CKQuery(recordType: "UserProfile", predicate: NSPredicate(format: "userReference IN %@", references))
-            CKContainer.default().publicCloudDatabase.perform(profileQuery, inZoneWith: nil) { profileRecords, _ in
-                guard let profileRecords = profileRecords else { return }
-
-                var results: [NearbyUser] = []
-
-                let group = DispatchGroup()
-
-                for record in profileRecords {
-                    guard let ref = record["userReference"] as? CKRecord.Reference else {
-                        print("❌ Missing userReference in record: \(record.recordID.recordName)")
-                        continue
-                    }
-
-                    group.enter()
-                    let id = ref.recordID.recordName
-                    let name = record["name"] as? String ?? "Unknown"
-
-                    var image: UIImage? = nil
-                    if let asset = record["photo1"] as? CKAsset,
-                       let url = asset.fileURL,
-                       let data = try? Data(contentsOf: url),
-                       let uiImage = UIImage(data: data) {
-                        image = uiImage
-                    }
-
-                    results.append(NearbyUser(id: id, name: name, profileImage: image))
-                    group.leave()
-                }
-
-
-                group.notify(queue: .main) {
-                    nearbyUsers = results
-                }
-            }
-        }
-    }
     func loadProfile() {
         guard let userID = UserDefaults.standard.string(forKey: "appleUserIdentifier") else { return }
         let recordID = CKRecord.ID(recordName: "\(userID)_profile")
@@ -515,6 +570,64 @@ struct NearbyUser: Identifiable {
     let id: String
     let name: String
     let profileImage: UIImage?
+    let fullProfile: [String: String]
+    let fieldVisibilities: [String: String]
+}
+
+struct ProfileCardView: View {
+    let user: NearbyUser
+    let onClose: () -> Void
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                if let image = user.profileImage {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 220, height: 300)
+                        .clipShape(RoundedRectangle(cornerRadius: 20))
+                }
+                Text("\(user.name)\(user.fullProfile["age"].flatMap { ", \($0)" } ?? "")")
+                    .font(.title2.weight(.bold))
+
+
+
+                ForEach(visibleFields(), id: \.self) { key in
+                    if let value = user.fullProfile[key] {
+                        HStack {
+                            Text(label(for: key))
+                                .fontWeight(.semibold)
+                            Spacer()
+                            Text(value)
+                                .foregroundColor(.gray)
+                        }
+                        .padding(.horizontal)
+                    }
+                }
+
+                Button("Close") {
+                    onClose()
+                }
+                .buttonStyle(.bordered)
+                .padding(.top)
+            }
+            .padding()
+        }
+        .background(.regularMaterial)
+        .cornerRadius(20)
+        .shadow(radius: 10)
+        .padding()
+    }
+
+    func visibleFields() -> [String] {
+        user.fieldVisibilities.filter { $0.value == "Everyone" }.map { $0.key }.sorted()
+    }
+
+    func label(for key: String) -> String {
+        key.replacingOccurrences(of: "(?<=\\w)([A-Z])", with: " $1", options: .regularExpression)
+            .capitalized
+    }
 }
 
 
