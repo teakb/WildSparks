@@ -2,60 +2,136 @@ import SwiftUI
 import CloudKit
 import PhotosUI
 
-
-
 struct ProfileView: View {
     @ObservedObject var profile = UserProfile()
-    @State private var isEditing = false
     @State private var images: [Data] = []
     @State private var selectedItems: [PhotosPickerItem] = []
     @State private var feet: Int = 5
     @State private var inches: Int = 6
     @State private var showingImagePicker = false
+    @State private var isEditing = false
     @State private var currentUserID: String = ""
+
+    private let gridColumns = [
+        GridItem(.flexible(), spacing: 16),
+        GridItem(.flexible(), spacing: 16)
+    ]
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 0) {
-                    headerSection
-                        .frame(height: 300)
+            ZStack {
+                Color(.systemGray6).ignoresSafeArea()
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 24) {
+                        photosCarousel
 
-                    VStack(alignment: .leading, spacing: 25) {
-                        basicInfoSection()
-                        lifestyleSection()
-                        backgroundSection()
-                        educationWorkSection()
-                        datingPreferencesSection()
-                        extrasSection()
-                        bracketPreferencesSection()
-                        
-                        if isEditing {
-                            saveButton
-                                .padding(.vertical, 20)
+                        // About Me
+                        Group {
+                            if isEditing {
+                                basicInfoSection()
+                                    .padding()
+                                    .background(Color.white)
+                                    .cornerRadius(12)
+                            } else {
+                                SectionGrid(title: "About Me", items: aboutItems)
+                            }
                         }
+
+                        // Lifestyle
+                        Group {
+                            if isEditing {
+                                lifestyleSection()
+                                    .padding()
+                                    .background(Color.white)
+                                    .cornerRadius(12)
+                            } else {
+                                SectionGrid(title: "Lifestyle", items: lifestyleItems)
+                            }
+                        }
+
+                        // Background
+                        Group {
+                            if isEditing {
+                                backgroundSection()
+                                    .padding()
+                                    .background(Color.white)
+                                    .cornerRadius(12)
+                            } else {
+                                SectionGrid(title: "Background", items: backgroundItems)
+                            }
+                        }
+
+                        // Work & Education
+                        Group {
+                            if isEditing {
+                                educationWorkSection()
+                                    .padding()
+                                    .background(Color.white)
+                                    .cornerRadius(12)
+                            } else {
+                                SectionGrid(title: "Work & Education", items: workItems)
+                            }
+                        }
+
+                        // Dating Preferences
+                        Group {
+                            if isEditing {
+                                datingPreferencesSection()
+                                    .padding()
+                                    .background(Color.white)
+                                    .cornerRadius(12)
+                            } else {
+                                SectionGrid(title: "Dating Preferences", items: datingItems)
+                            }
+                        }
+
+                        // More About Me
+                        Group {
+                            if isEditing {
+                                extrasSection()
+                                    .padding()
+                                    .background(Color.white)
+                                    .cornerRadius(12)
+                            } else {
+                                SectionGrid(title: "More About Me", items: extrasItems)
+                            }
+                        }
+
+                        // Ideal Bracket
+                        SectionGrid(title: "Ideal Bracket", items: bracketItems)
+
+                        // Edit/Save
+                        Button {
+                            if isEditing { saveProfile() }
+                            isEditing.toggle()
+                        } label: {
+                            Text(isEditing ? "Save Profile" : "Edit Profile")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(isEditing ? Color.black : Color.blue)
+                                .foregroundColor(.white)
+                                .cornerRadius(12)
+                        }
+                        .padding(.horizontal)
+                        .padding(.bottom, 40)
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 20)
+                    .padding(.horizontal)
                     .padding(.bottom, 40)
-                    .background(Color.white)
                 }
             }
-            .background(Color(.systemGray6))
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitle("Profile", displayMode: .inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(isEditing ? "Cancel" : "Edit") {
+                    // also toggle via pencil
+                    Button {
+                        if isEditing { saveProfile() }
                         isEditing.toggle()
-                        if !isEditing {
-                            loadProfile()
-                        }
+                    } label: {
+                        Image(systemName: "pencil.circle.fill")
+                            .font(.title2)
+                            .foregroundColor(.black)
                     }
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.black)
-                    .padding(8)
-                    .background(Circle().fill(Color.gray.opacity(0.2)))
                 }
             }
             .onAppear {
@@ -66,403 +142,233 @@ struct ProfileView: View {
             }
         }
     }
-    // MARK: - Lifestyle Section
 
-    private func lifestyleSection() -> some View {
-        guard isEditing || shouldShow("drinks") || shouldShow("smokes") || shouldShow("smokesWeed") || shouldShow("usesDrugs") || shouldShow("pets") || shouldShow("wantsChildren") else { return AnyView(EmptyView()) }
-
-        return AnyView(
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Lifestyle")
-                    .font(.system(size: 24, weight: .bold))
-
-                if isEditing {
-                    Toggle("Drinks", isOn: $profile.drinks)
-                    Toggle("Smokes", isOn: $profile.smokes)
-                    Toggle("Smokes Weed", isOn: $profile.smokesWeed)
-                    Toggle("Uses Drugs", isOn: $profile.usesDrugs)
-                    TextField("Pets", text: $profile.pets)
-                        .textFieldStyle(.roundedBorder)
-                    Toggle("Has Children", isOn: $profile.hasChildren)
-                    Toggle("Wants Children", isOn: $profile.wantsChildren)
-                } else {
-                    if shouldShow("drinks"), profile.drinks {
-                        Text("🍷 Drinks")
-                    }
-                    if shouldShow("smokes"), profile.smokes {
-                        Text("🚬 Smokes")
-                    }
-                    if shouldShow("smokesWeed"), profile.smokesWeed {
-                        Text("🌿 Smokes Weed")
-                    }
-                    if shouldShow("usesDrugs"), profile.usesDrugs {
-                        Text("💊 Uses Drugs")
-                    }
-                    if shouldShow("pets"), !profile.pets.isEmpty {
-                        Text("🐾 Pets: \(profile.pets)")
-                    }
-                    if shouldShow("wantsChildren"), profile.wantsChildren {
-                        Text("👶 Wants Children")
-                    }
-                    if shouldShow("hasChildren"), profile.hasChildren {
-                        Text("👶 Has Children")
-                    }
+    // MARK: — Photos
+    private var photosCarousel: some View {
+        TabView {
+            ForEach(images, id: \.self) { data in
+                if let ui = UIImage(data: data) {
+                    Image(uiImage: ui)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(height: 300)
+                        .clipped()
                 }
             }
-        )
-    }
-
-    // MARK: - Background Section
-
-    private func backgroundSection() -> some View {
-        guard isEditing || shouldShow("religion") || shouldShow("ethnicity") || shouldShow("hometown") || shouldShow("politicalView") || shouldShow("zodiacSign") || shouldShow("languagesSpoken") else { return AnyView(EmptyView()) }
-
-        return AnyView(
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Background")
-                    .font(.system(size: 24, weight: .bold))
-
-                if isEditing {
-                    editableTextField("Religion", text: $profile.religion)
-                    editableTextField("Ethnicity", text: $profile.ethnicity)
-                    editableTextField("Where do you currently live", text: $profile.hometown)
-                    editableTextField("Political View", text: $profile.politicalView)
-                    editableTextField("Zodiac Sign", text: $profile.zodiacSign)
-                    editableTextField("Languages Spoken", text: $profile.languagesSpoken)
-                } else {
-                    if shouldShow("religion"), !profile.religion.isEmpty {
-                        Text("🛐 Religion: \(profile.religion)")
-                    }
-                    if shouldShow("ethnicity"), !profile.ethnicity.isEmpty {
-                        Text("🌎 Ethnicity: \(profile.ethnicity)")
-                    }
-                    if shouldShow("hometown"), !profile.hometown.isEmpty {
-                        Text("🏙 Lives in: \(profile.hometown)")
-                    }
-                    if shouldShow("politicalView"), !profile.politicalView.isEmpty {
-                        Text("🗳 Political View: \(profile.politicalView)")
-                    }
-                    if shouldShow("zodiacSign"), !profile.zodiacSign.isEmpty {
-                        Text("🔮 Zodiac: \(profile.zodiacSign)")
-                    }
-                    if shouldShow("languagesSpoken"), !profile.languagesSpoken.isEmpty {
-                        Text("🗣 Speaks: \(profile.languagesSpoken)")
-                    }
-                }
-            }
-        )
-    }
-
-    // MARK: - Education & Work
-
-    private func educationWorkSection() -> some View {
-        guard isEditing || shouldShow("educationLevel") || shouldShow("college") || shouldShow("jobTitle") || shouldShow("companyName") else { return AnyView(EmptyView()) }
-
-        return AnyView(
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Work & Education")
-                    .font(.system(size: 24, weight: .bold))
-
-                if isEditing {
-                    editableTextField("Education Level", text: $profile.educationLevel)
-                    editableTextField("College", text: $profile.college)
-                    editableTextField("Job Title", text: $profile.jobTitle)
-                    editableTextField("Company Name", text: $profile.companyName)
-                } else {
-                    if shouldShow("educationLevel"), !profile.educationLevel.isEmpty {
-                        Text("🎓 Education: \(profile.educationLevel)")
-                    }
-                    if shouldShow("college"), !profile.college.isEmpty {
-                        Text("🏫 College: \(profile.college)")
-                    }
-                    if shouldShow("jobTitle"), !profile.jobTitle.isEmpty {
-                        Text("💼 Job Title: \(profile.jobTitle)")
-                    }
-                    if shouldShow("companyName"), !profile.companyName.isEmpty {
-                        Text("🏢 Company: \(profile.companyName)")
-                    }
-                }
-            }
-        )
-    }
-
-    // MARK: - Dating Preferences
-
-    private func datingPreferencesSection() -> some View {
-        guard isEditing || shouldShow("interestedIn") || shouldShow("datingIntentions") || shouldShow("relationshipType") else { return AnyView(EmptyView()) }
-
-        return AnyView(
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Dating Preferences")
-                    .font(.system(size: 24, weight: .bold))
-
-                if isEditing {
-                    editableTextField("Interested In", text: $profile.interestedIn)
-                    editableTextField("Dating Intentions", text: $profile.datingIntentions)
-                    editableTextField("Relationship Type", text: $profile.relationshipType)
-                } else {
-                    if shouldShow("interestedIn"), !profile.interestedIn.isEmpty {
-                        Text("💘 Interested in: \(profile.interestedIn)")
-                    }
-                    if shouldShow("datingIntentions"), !profile.datingIntentions.isEmpty {
-                        Text("🫶 Intentions: \(profile.datingIntentions)")
-                    }
-                    if shouldShow("relationshipType"), !profile.relationshipType.isEmpty {
-                        Text("📖 Relationship: \(profile.relationshipType)")
-                    }
-                }
-            }
-        )
-    }
-
-    // MARK: - Extras
-
-    private func extrasSection() -> some View {
-        guard isEditing || shouldShow("socialMediaLinks") || shouldShow("politicalEngagementLevel") || shouldShow("dietaryPreferences") || shouldShow("exerciseHabits") || shouldShow("interests") else { return AnyView(EmptyView()) }
-
-        return AnyView(
-            VStack(alignment: .leading, spacing: 12) {
-                Text("More About Me")
-                    .font(.system(size: 24, weight: .bold))
-
-                if isEditing {
-                    editableTextField("Social Media", text: $profile.socialMediaLinks)
-                    editableTextField("Political Engagement", text: $profile.politicalEngagementLevel)
-                    editableTextField("Dietary Preferences", text: $profile.dietaryPreferences)
-                    editableTextField("Exercise Habits", text: $profile.exerciseHabits)
-                    editableTextField("Interests", text: $profile.interests)
-                } else {
-                    if shouldShow("socialMediaLinks"), !profile.socialMediaLinks.isEmpty {
-                        Text("🌐 Socials: \(profile.socialMediaLinks)")
-                    }
-                    if shouldShow("politicalEngagementLevel"), !profile.politicalEngagementLevel.isEmpty {
-                        Text("📣 Politics: \(profile.politicalEngagementLevel)")
-                    }
-                    if shouldShow("dietaryPreferences"), !profile.dietaryPreferences.isEmpty {
-                        Text("🍽 Eats: \(profile.dietaryPreferences)")
-                    }
-                    if shouldShow("exerciseHabits"), !profile.exerciseHabits.isEmpty {
-                        Text("💪 Fitness: \(profile.exerciseHabits)")
-                    }
-                    if shouldShow("interests"), !profile.interests.isEmpty {
-                        Text("🎯 Interests: \(profile.interests)")
-                    }
-                }
-            }
-        )
-    }
-
-    // MARK: - Bracket Preferences
-
-    private func bracketPreferencesSection() -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Ideal Bracket")
-                .font(.system(size: 24, weight: .bold))
-
-            Text("Ages: \(profile.preferredAgeRange.lowerBound)–\(profile.preferredAgeRange.upperBound)")
-            if !profile.preferredEthnicities.isEmpty {
-                Text("Ethnicities: \(profile.preferredEthnicities.joined(separator: ", "))")
-            }
-        }
-    }
-
-    private var headerSection: some View {
-        VStack(spacing: 20) {
-            Text(profile.name.isEmpty ? "Your Profile" : profile.name)
-                .font(.system(size: 34, weight: .bold))
-                .foregroundColor(.black)
-                .padding(.top, 20)
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 15) {
-                    ForEach(images, id: \.self) { imageData in
-                        if let uiImage = UIImage(data: imageData) {
-                            Image(uiImage: uiImage)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: 150, height: 200)
-                                .clipShape(RoundedRectangle(cornerRadius: 15))
-                                .shadow(radius: 3)
-                        }
-                    }
-
-                    if isEditing && images.count < 6 {
-                        Button(action: { showingImagePicker = true }) {
-                            VStack {
-                                Image(systemName: "plus.circle.fill")
-                                    .font(.system(size: 32))
-                                Text("Add Photo")
-                                    .font(.system(size: 14, weight: .medium))
-                            }
-                            .frame(width: 150, height: 200)
-                            .background(Color(.systemGray5))
-                            .foregroundColor(.black)
-                            .clipShape(RoundedRectangle(cornerRadius: 15))
+            if isEditing && images.count < 6 {
+                Button {
+                    showingImagePicker = true
+                } label: {
+                    ZStack {
+                        Rectangle()
+                            .fill(Color(.systemGray5))
+                            .frame(height: 300)
+                        VStack {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.largeTitle)
+                            Text("Add Photo")
+                                .font(.caption)
                         }
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 20)
             }
         }
-        .background(Color.white)
+        .frame(height: 300)
+        .tabViewStyle(PageTabViewStyle())
         .photosPicker(isPresented: $showingImagePicker,
                       selection: $selectedItems,
                       maxSelectionCount: 6 - images.count,
                       matching: .images)
-        .onChange(of: selectedItems) { newItems in
-            handlePhotoSelection(newItems)
-        }
+        .onChange(of: selectedItems, perform: handlePhotoSelection)
     }
 
-    private var saveButton: some View {
-        Button(action: {
-            saveProfile()
-            isEditing = false
-        }) {
-            Text("Save Profile")
-                .font(.system(size: 18, weight: .bold))
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 15)
-                .background(Color.black)
-                .clipShape(Capsule())
-                .shadow(radius: 5)
-        }
-    }
+    // MARK: — Editable Sections
 
-    private func shouldShow(_ key: String) -> Bool {
-        guard let setting = profile.fieldVisibilities[key] else { return false }
-        switch setting {
-        case .everyone:
-            return true
-        case .matches, .onlyMe:
-            return true // You can extend this to respect who is viewing (e.g., in other people's views)
-        }
-    }
     private func basicInfoSection() -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("About Me")
-                .font(.system(size: 24, weight: .bold))
-
-            if isEditing {
-                VStack(spacing: 10) {
-                    TextField("Name", text: $profile.name)
-                        .font(.system(size: 16))
-                        .padding(12)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(8)
-
-                    Picker("Age", selection: $profile.age) {
-                        ForEach(18...100, id: \.self) { age in
-                            Text("\(age)").tag(age)
-                        }
-                    }
-                    .pickerStyle(.menu)
-
-                    editableTextField("Email", text: $profile.email)
-                    editableTextField("Phone Number", text: $profile.phoneNumber)
-
-                    Picker("Gender", selection: $profile.gender) {
-                        Text("Male").tag("Male")
-                        Text("Female").tag("Female")
-                        Text("Non-Binary").tag("Non-Binary")
-                        Text("Other").tag("Other")
-                        Text("Prefer not to say").tag("Prefer not to say")
-                    }
-                    .pickerStyle(.menu)
-
-                    Picker("Sexuality", selection: $profile.sexuality) {
-                        Text("Heterosexual").tag("Heterosexual")
-                        Text("Homosexual").tag("Homosexual")
-                        Text("Bisexual").tag("Bisexual")
-                        Text("Pansexual").tag("Pansexual")
-                        Text("Asexual").tag("Asexual")
-                        Text("Other").tag("Other")
-                    }
-                    .pickerStyle(.menu)
-
-                    heightPicker()
+        VStack(spacing: 12) {
+            TextField("Name", text: $profile.name)
+                .textFieldStyle(.roundedBorder)
+            HStack {
+                Picker("Age", selection: $profile.age) {
+                    ForEach(18...100, id: \.self) { Text("\($0)") }
                 }
-            } else {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(profile.name)
-                        .font(.system(size: 28, weight: .bold))
+                .pickerStyle(.menu)
+                Spacer()
+                heightPicker()
+            }
+            TextField("Email", text: $profile.email)
+                .textFieldStyle(.roundedBorder)
+            TextField("Phone", text: $profile.phoneNumber)
+                .textFieldStyle(.roundedBorder)
+        }
+    }
 
-                    HStack(spacing: 8) {
-                        Text("\(profile.age)")
-                        if !profile.height.isEmpty { Text("• \(profile.height)") }
-                        if shouldShow("gender"), !profile.gender.isEmpty {
-                            Text("• \(profile.gender)")
-                        }
-                    }
-                    .font(.system(size: 16))
-                    .foregroundColor(.gray)
+    private func lifestyleSection() -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Toggle("Drinks", isOn: $profile.drinks)
+            Toggle("Smokes", isOn: $profile.smokes)
+            Toggle("Smokes Weed", isOn: $profile.smokesWeed)
+            Toggle("Uses Drugs", isOn: $profile.usesDrugs)
+            TextField("Pets", text: $profile.pets)
+                .textFieldStyle(.roundedBorder)
+            Toggle("Has Children", isOn: $profile.hasChildren)
+            Toggle("Wants Children", isOn: $profile.wantsChildren)
+        }
+    }
 
-                    if shouldShow("email"), !profile.email.isEmpty {
-                        Text(profile.email)
-                            .font(.system(size: 16))
-                            .foregroundColor(.gray)
-                    }
+    private func backgroundSection() -> some View {
+        VStack(spacing: 12) {
+            TextField("Religion", text: $profile.religion).textFieldStyle(.roundedBorder)
+            TextField("Ethnicity", text: $profile.ethnicity).textFieldStyle(.roundedBorder)
+            TextField("Lives in", text: $profile.hometown).textFieldStyle(.roundedBorder)
+            TextField("Political View", text: $profile.politicalView).textFieldStyle(.roundedBorder)
+            TextField("Zodiac Sign", text: $profile.zodiacSign).textFieldStyle(.roundedBorder)
+            TextField("Languages", text: $profile.languagesSpoken).textFieldStyle(.roundedBorder)
+        }
+    }
+
+    private func educationWorkSection() -> some View {
+        VStack(spacing: 12) {
+            TextField("Education Level", text: $profile.educationLevel).textFieldStyle(.roundedBorder)
+            TextField("College", text: $profile.college).textFieldStyle(.roundedBorder)
+            TextField("Job Title", text: $profile.jobTitle).textFieldStyle(.roundedBorder)
+            TextField("Company", text: $profile.companyName).textFieldStyle(.roundedBorder)
+        }
+    }
+
+    private func datingPreferencesSection() -> some View {
+        VStack(spacing: 12) {
+            TextField("Interested In", text: $profile.interestedIn).textFieldStyle(.roundedBorder)
+            TextField("Intentions", text: $profile.datingIntentions).textFieldStyle(.roundedBorder)
+            TextField("Relationship", text: $profile.relationshipType).textFieldStyle(.roundedBorder)
+        }
+    }
+
+    private func extrasSection() -> some View {
+        VStack(spacing: 12) {
+            TextField("Socials", text: $profile.socialMediaLinks).textFieldStyle(.roundedBorder)
+            TextField("Engagement", text: $profile.politicalEngagementLevel).textFieldStyle(.roundedBorder)
+            TextField("Diet", text: $profile.dietaryPreferences).textFieldStyle(.roundedBorder)
+            TextField("Exercise", text: $profile.exerciseHabits).textFieldStyle(.roundedBorder)
+            TextField("Interests", text: $profile.interests).textFieldStyle(.roundedBorder)
+        }
+    }
+
+    // MARK: — Read-Only Grids
+
+    private func SectionGrid(title: String, items: [(String, String)]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.title3).bold()
+                .padding(.bottom, 4)
+            LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 12) {
+                ForEach(items, id: \.0) { icon, text in
+                    Label(text, systemImage: icon)
+                        .font(.subheadline)
+                        .foregroundColor(.primary)
                 }
             }
+            .padding()
+            .background(Color.white)
+            .cornerRadius(12)
+            .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
         }
     }
 
-    // MARK: - Helpers
+    // MARK: — Data Arrays
 
-    private func editableTextField(_ label: String, text: Binding<String>) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label)
-                .font(.subheadline)
-                .foregroundColor(.primary)
-            TextField("Enter \(label.lowercased())", text: text)
-                .font(.system(size: 16))
-                .padding(12)
-                .background(Color(.systemGray6))
-                .cornerRadius(8)
-        }
+    private var aboutItems: [(String, String)] {
+        [
+            ("person", profile.name),
+            ("number", "\(profile.age) yrs"),
+            ("ruler", profile.height),
+            ("envelope", profile.email),
+            ("phone", profile.phoneNumber)
+        ]
     }
+
+    private var lifestyleItems: [(String, String)] {
+        var a: [(String, String)] = []
+        if profile.drinks { a.append(("wineglass", "Drinks")) }
+        if profile.smokes { a.append(("smoke", "Smokes")) }
+        if profile.smokesWeed { a.append(("leaf", "Smokes Weed")) }
+        if profile.usesDrugs { a.append(("pills", "Uses Drugs")) }
+        if !profile.pets.isEmpty { a.append(("pawprint", "Pets: \(profile.pets)")) }
+        if profile.hasChildren { a.append(("person.2", "Has Children")) }
+        if profile.wantsChildren { a.append(("figure.wave", "Wants Children")) }
+        return a
+    }
+
+    private var backgroundItems: [(String, String)] {
+        [
+            ("hands.sparkles", "Religion: \(profile.religion)"),
+            ("globe", "Ethnicity: \(profile.ethnicity)"),
+            ("house", "Lives in: \(profile.hometown)"),
+            ("person.3.sequence", "Politics: \(profile.politicalView)"),
+            ("star", "Zodiac: \(profile.zodiacSign)"),
+            ("bubble.left.and.bubble.right", "Languages: \(profile.languagesSpoken)")
+        ]
+    }
+
+    private var workItems: [(String, String)] {
+        [
+            ("graduationcap", "Education: \(profile.educationLevel)"),
+            ("building.columns", "College: \(profile.college)"),
+            ("briefcase", "Job: \(profile.jobTitle)"),
+            ("building.2", "Company: \(profile.companyName)")
+        ]
+    }
+
+    private var datingItems: [(String, String)] {
+        [
+            ("heart", "Interested In: \(profile.interestedIn)"),
+            ("hands.sparkles", "Intentions: \(profile.datingIntentions)"),
+            ("book.closed", "Relationship: \(profile.relationshipType)")
+        ]
+    }
+
+    private var extrasItems: [(String, String)] {
+        [
+            ("link", "Socials: \(profile.socialMediaLinks)"),
+            ("megaphone", "Engagement: \(profile.politicalEngagementLevel)"),
+            ("fork.knife", "Diet: \(profile.dietaryPreferences)"),
+            ("figure.walk", "Exercise: \(profile.exerciseHabits)"),
+            ("star.fill", "Interests: \(profile.interests)")
+        ]
+    }
+
+    private var bracketItems: [(String, String)] {
+        var a: [(String, String)] = [
+            ("number", "Ages: \(profile.preferredAgeRange.lowerBound)–\(profile.preferredAgeRange.upperBound)")
+        ]
+        if !profile.preferredEthnicities.isEmpty {
+            a.append(("globe", "Ethnicities: \(profile.preferredEthnicities.joined(separator: ", "))"))
+        }
+        return a
+    }
+
+    // MARK: — Helpers
 
     private func heightPicker() -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Height")
-                .font(.system(size: 16, weight: .medium))
-            HStack(spacing: 15) {
-                Picker("", selection: $feet) {
-                    ForEach(3..<8, id: \.self) { ft in
-                        Text("\(ft) ft").tag(ft)
-                    }
-                }
-                .pickerStyle(.menu)
-                Picker("", selection: $inches) {
-                    ForEach(0..<12, id: \.self) { inch in
-                        Text("\(inch) in").tag(inch)
-                    }
-                }
-                .pickerStyle(.menu)
+        HStack {
+            Picker("", selection: $feet) {
+                ForEach(3..<8, id: \.self) { Text("\($0) ft") }
             }
-            .onChange(of: feet) { _ in updateHeight() }
-            .onChange(of: inches) { _ in updateHeight() }
+            .pickerStyle(.menu)
+            Picker("", selection: $inches) {
+                ForEach(0..<12, id: \.self) { Text("\($0) in") }
+            }
+            .pickerStyle(.menu)
         }
-    }
-
-    private func updateHeight() {
-        profile.height = "\(feet) ft \(inches) in"
+        .onChange(of: feet) { _ in profile.height = "\(feet) ft \(inches) in" }
+        .onChange(of: inches) { _ in profile.height = "\(feet) ft \(inches) in" }
     }
 
     private func handlePhotoSelection(_ items: [PhotosPickerItem]) {
         for item in items {
             item.loadTransferable(type: Data.self) { result in
-                switch result {
-                case .success(let data):
-                    if let data = data {
-                        DispatchQueue.main.async {
-                            images.append(data)
-                        }
-                    }
-                case .failure(let error):
-                    print("Error loading image: \(error.localizedDescription)")
+                if case .success(let d?) = result {
+                    DispatchQueue.main.async { images.append(d) }
                 }
             }
         }
@@ -470,69 +376,54 @@ struct ProfileView: View {
     }
 
     private func loadProfile() {
-        guard let userID = UserDefaults.standard.string(forKey: "appleUserIdentifier") else { return }
-        let recordID = CKRecord.ID(recordName: "\(userID)_profile")
-
-        CKContainer.default().publicCloudDatabase.fetch(withRecordID: recordID) { record, error in
-            guard let record = record else {
-                print("❌ Error loading profile: \(error?.localizedDescription ?? "Unknown")")
-                return
-            }
-
+        guard let uid = UserDefaults.standard.string(forKey: "appleUserIdentifier") else { return }
+        let rid = CKRecord.ID(recordName: "\(uid)_profile")
+        CKContainer.default().publicCloudDatabase.fetch(withRecordID: rid) { rec, _ in
+            guard let r = rec else { return }
             DispatchQueue.main.async {
-                profile.name = record["name"] as? String ?? ""
-                profile.age = record["age"] as? Int ?? 0
-                profile.email = record["email"] as? String ?? ""
-                profile.phoneNumber = record["phoneNumber"] as? String ?? ""
-                profile.gender = record["gender"] as? String ?? ""
-                profile.sexuality = record["sexuality"] as? String ?? ""
-                profile.height = record["height"] as? String ?? ""
-                profile.drinks = record["drinks"] as? Bool ?? false
-                profile.smokes = record["smokes"] as? Bool ?? false
-                profile.smokesWeed = record["smokesWeed"] as? Bool ?? false
-                profile.usesDrugs = record["usesDrugs"] as? Bool ?? false
-                profile.pets = record["pets"] as? String ?? ""
-                profile.hasChildren = record["hasChildren"] as? Bool ?? false
-                profile.wantsChildren = record["wantsChildren"] as? Bool ?? false
-                profile.religion = record["religion"] as? String ?? ""
-                profile.ethnicity = record["ethnicity"] as? String ?? ""
-                profile.hometown = record["hometown"] as? String ?? ""
-                profile.politicalView = record["politicalView"] as? String ?? ""
-                profile.zodiacSign = record["zodiacSign"] as? String ?? ""
-                profile.languagesSpoken = record["languagesSpoken"] as? String ?? ""
-                profile.educationLevel = record["educationLevel"] as? String ?? ""
-                profile.college = record["college"] as? String ?? ""
-                profile.jobTitle = record["jobTitle"] as? String ?? ""
-                profile.companyName = record["companyName"] as? String ?? ""
-                profile.interestedIn = record["interestedIn"] as? String ?? ""
-                profile.datingIntentions = record["datingIntentions"] as? String ?? ""
-                profile.relationshipType = record["relationshipType"] as? String ?? ""
-                profile.socialMediaLinks = record["socialMediaLinks"] as? String ?? ""
-                profile.politicalEngagementLevel = record["politicalEngagementLevel"] as? String ?? ""
-                profile.dietaryPreferences = record["dietaryPreferences"] as? String ?? ""
-                profile.exerciseHabits = record["exerciseHabits"] as? String ?? ""
-                profile.interests = record["interests"] as? String ?? ""
-
-                if let visString = record["fieldVisibilities"] as? String,
-                   let data = visString.data(using: .utf8),
-                   let dict = try? JSONDecoder().decode([String: VisibilitySetting].self, from: data) {
+                profile.name = r["name"] as? String ?? ""
+                profile.age = r["age"] as? Int ?? 0
+                profile.email = r["email"] as? String ?? ""
+                profile.phoneNumber = r["phoneNumber"] as? String ?? ""
+                profile.gender = r["gender"] as? String ?? ""
+                profile.sexuality = r["sexuality"] as? String ?? ""
+                profile.height = r["height"] as? String ?? ""
+                profile.drinks = r["drinks"] as? Bool ?? false
+                profile.smokes = r["smokes"] as? Bool ?? false
+                profile.smokesWeed = r["smokesWeed"] as? Bool ?? false
+                profile.usesDrugs = r["usesDrugs"] as? Bool ?? false
+                profile.pets = r["pets"] as? String ?? ""
+                profile.hasChildren = r["hasChildren"] as? Bool ?? false
+                profile.wantsChildren = r["wantsChildren"] as? Bool ?? false
+                profile.religion = r["religion"] as? String ?? ""
+                profile.ethnicity = r["ethnicity"] as? String ?? ""
+                profile.hometown = r["hometown"] as? String ?? ""
+                profile.politicalView = r["politicalView"] as? String ?? ""
+                profile.zodiacSign = r["zodiacSign"] as? String ?? ""
+                profile.languagesSpoken = r["languagesSpoken"] as? String ?? ""
+                profile.educationLevel = r["educationLevel"] as? String ?? ""
+                profile.college = r["college"] as? String ?? ""
+                profile.jobTitle = r["jobTitle"] as? String ?? ""
+                profile.companyName = r["companyName"] as? String ?? ""
+                profile.interestedIn = r["interestedIn"] as? String ?? ""
+                profile.datingIntentions = r["datingIntentions"] as? String ?? ""
+                profile.relationshipType = r["relationshipType"] as? String ?? ""
+                profile.socialMediaLinks = r["socialMediaLinks"] as? String ?? ""
+                profile.politicalEngagementLevel = r["politicalEngagementLevel"] as? String ?? ""
+                profile.dietaryPreferences = r["dietaryPreferences"] as? String ?? ""
+                profile.exerciseHabits = r["exerciseHabits"] as? String ?? ""
+                profile.interests = r["interests"] as? String ?? ""
+                if let fv = r["fieldVisibilities"] as? String,
+                   let d = fv.data(using: .utf8),
+                   let dict = try? JSONDecoder().decode([String: VisibilitySetting].self, from: d) {
                     profile.fieldVisibilities = dict
                 }
-
                 images.removeAll()
                 for i in 1...6 {
-                    if let asset = record["photo\(i)"] as? CKAsset,
-                       let fileURL = asset.fileURL,
-                       let data = try? Data(contentsOf: fileURL) {
-                        images.append(data)
-                    }
-                }
-
-                if let heightString = profile.height as String? {
-                    let comps = heightString.components(separatedBy: " ")
-                    if comps.count >= 3 {
-                        feet = Int(comps[0]) ?? 5
-                        inches = Int(comps[2]) ?? 6
+                    if let a = r["photo\(i)"] as? CKAsset,
+                       let url = a.fileURL,
+                       let d = try? Data(contentsOf: url) {
+                        images.append(d)
                     }
                 }
             }
@@ -540,12 +431,10 @@ struct ProfileView: View {
     }
 
     private func saveProfile() {
-        guard let userID = UserDefaults.standard.string(forKey: "appleUserIdentifier") else { return }
-        let recordID = CKRecord.ID(recordName: "\(userID)_profile")
-
-        CKContainer.default().publicCloudDatabase.fetch(withRecordID: recordID) { existingRecord, error in
-            let record = existingRecord ?? CKRecord(recordType: "UserProfile", recordID: recordID)
-
+        guard let uid = UserDefaults.standard.string(forKey: "appleUserIdentifier") else { return }
+        let rid = CKRecord.ID(recordName: "\(uid)_profile")
+        CKContainer.default().publicCloudDatabase.fetch(withRecordID: rid) { existing, _ in
+            let record = existing ?? CKRecord(recordType: "UserProfile", recordID: rid)
             record["name"] = profile.name as NSString
             record["age"] = profile.age as NSNumber
             record["email"] = profile.email as NSString
@@ -578,31 +467,21 @@ struct ProfileView: View {
             record["dietaryPreferences"] = profile.dietaryPreferences as NSString
             record["exerciseHabits"] = profile.exerciseHabits as NSString
             record["interests"] = profile.interests as NSString
-
-            if let encoded = try? JSONEncoder().encode(profile.fieldVisibilities),
-               let string = String(data: encoded, encoding: .utf8) {
-                record["fieldVisibilities"] = string as NSString
+            if let data = try? JSONEncoder().encode(profile.fieldVisibilities),
+               let json = String(data: data, encoding: .utf8) {
+                record["fieldVisibilities"] = json as NSString
             }
-
-            for (index, imageData) in images.enumerated() {
-                let tempDirectory = NSTemporaryDirectory()
-                let fileName = UUID().uuidString + ".jpg"
-                let fileURL = URL(fileURLWithPath: tempDirectory).appendingPathComponent(fileName)
-                try? imageData.write(to: fileURL)
-                let asset = CKAsset(fileURL: fileURL)
-                record["photo\(index + 1)"] = asset
+            for (i, d) in images.enumerated() {
+                let url = URL(fileURLWithPath: NSTemporaryDirectory())
+                    .appendingPathComponent(UUID().uuidString + ".jpg")
+                try? d.write(to: url)
+                record["photo\(i+1)"] = CKAsset(fileURL: url)
             }
-
-            CKContainer.default().publicCloudDatabase.save(record) { _, error in
-                if let error = error {
-                    print("❌ Error saving profile: \(error.localizedDescription)")
-                } else {
-                    print("✅ Profile saved")
-                }
-            }
+            CKContainer.default().publicCloudDatabase.save(record) { _, _ in }
         }
     }
 }
+
 
 
 

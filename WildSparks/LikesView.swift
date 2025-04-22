@@ -1,5 +1,21 @@
 import SwiftUI
 import CloudKit
+import UserNotifications
+
+struct Like: Identifiable {
+    let id: String
+    let toID: String
+    let toName: String
+    let profileImage: UIImage?
+    let profileDetails: [String: String]
+}
+
+struct UserProfilePreview {
+    let id: String
+    let name: String
+    let image: UIImage?
+    let details: [String: String]
+}
 
 struct LikesView: View {
     @State private var incomingLikes: [Like] = []
@@ -7,7 +23,9 @@ struct LikesView: View {
 
     var body: some View {
         NavigationStack {
-            VStack {
+            ZStack {
+                Color(.systemBackground).ignoresSafeArea()
+
                 if incomingLikes.isEmpty {
                     VStack(spacing: 12) {
                         Text("No likes yet...")
@@ -21,101 +39,114 @@ struct LikesView: View {
                     }
                     .padding(.top, 50)
                 } else {
-                    Spacer()
-
                     let current = incomingLikes[currentIndex]
-                    VStack(spacing: 16) {
-                        if let image = current.profileImage {
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: 250, height: 350)
-                                .clipShape(RoundedRectangle(cornerRadius: 20))
-                                .shadow(radius: 10)
+                    VStack {
+                        ScrollView {
+                            VStack(spacing: 20) {
+                                if let image = current.profileImage {
+                                    Image(uiImage: image)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: 300, height: 300)
+                                        .clipShape(RoundedRectangle(cornerRadius: 20))
+                                        .shadow(radius: 5)
+                                }
+
+                                Text(current.toName)
+                                    .font(.title)
+                                    .bold()
+
+                                VStack(alignment: .leading, spacing: 8) {
+                                    ForEach(current.profileDetails.sorted(by: { $0.key < $1.key }), id: \.key) { key, value in
+                                        HStack(alignment: .top) {
+                                            Text("\(key.capitalized):")
+                                                .bold()
+                                            Text(value)
+                                                .fixedSize(horizontal: false, vertical: true)
+                                        }
+                                    }
+                                }
+                                .padding()
+                                .background(RoundedRectangle(cornerRadius: 12).fill(Color(.secondarySystemBackground)))
+                            }
+                            .padding()
                         }
 
-                        Text(current.toName)
-                            .font(.title)
-                            .bold()
+                        Spacer()
+
+                        HStack {
+                            Button {
+                                deleteLike(fromUserID: current.toID)
+                                dismissCurrentLike()
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .resizable()
+                                    .frame(width: 60, height: 60)
+                                    .foregroundColor(.red)
+                            }
+
+                            Spacer()
+
+                            Button {
+                                likeBack(userID: current.toID)
+                            } label: {
+                                Image(systemName: "heart.circle.fill")
+                                    .resizable()
+                                    .frame(width: 60, height: 60)
+                                    .foregroundColor(.pink)
+                            }
+                        }
+                        .padding(.horizontal, 40)
+                        .padding(.bottom, 30)
                     }
-
-                    HStack(spacing: 60) {
-                        Button(action: {
-                            deleteLike(fromUserID: current.toID)
-                            dismissCurrentLike()
-
-                        }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .resizable()
-                                .frame(width: 50, height: 50)
-                                .foregroundColor(.red)
-                        }
-
-                        Button(action: {
-                            likeBack(userID: current.toID)
-                        }) {
-                            Image(systemName: "heart.circle.fill")
-                                .resizable()
-                                .frame(width: 50, height: 50)
-                                .foregroundColor(.pink)
-                        }
-                    }
-                    Button("👻 Simulate Like + Match") {
-                        simulateIncomingLike()
-
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-                            simulateMatch()
-                        }
-                    }
-                    .padding()
-                    .background(Color.blue)
-                    .foregroundColor(.white)
-                    .cornerRadius(12)
-
-                    .padding(.top, 30)
-
-                    Spacer()
                 }
             }
             .navigationTitle("Likes")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Simulate Like") {
+                        simulateIncomingLike()
+                    }
+                }
+            }
             .onAppear {
                 fetchIncomingLikes()
-                
-               /* DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-                    simulateIncomingLike()
-                }
-
-                DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
-                    simulateMatch()
-                }
-                */
             }
         }
-        .tabItem { Label("Likes", systemImage: "heart") }
+        .tabItem {
+            Label("Likes", systemImage: "heart")
+        }
     }
 
     func dismissCurrentLike() {
         if !incomingLikes.isEmpty {
             incomingLikes.remove(at: currentIndex)
-            if currentIndex >= incomingLikes.count { currentIndex = 0 }
+            if currentIndex >= incomingLikes.count {
+                currentIndex = 0
+            }
         }
     }
 
     func fetchIncomingLikes() {
         guard let userID = UserDefaults.standard.string(forKey: "appleUserIdentifier") else { return }
-
         let predicate = NSPredicate(format: "toUser == %@", userID)
         let query = CKQuery(recordType: "Like", predicate: predicate)
 
         CKContainer.default().publicCloudDatabase.perform(query, inZoneWith: nil) { records, error in
             if let records = records {
-                let fromUserIDs = records.map { $0["fromUser"] as! String }
+                let fromUserIDs: [String] = records.compactMap { $0["fromUser"] as? String }
                 fetchUserProfiles(for: fromUserIDs) { profiles in
-                    let likes = profiles.map {
-                        Like(id: $0.id, toID: $0.id, toName: $0.name, profileImage: $0.image)
+                    let likes = profiles.map { profile in
+                        Like(
+                            id: profile.id,
+                            toID: profile.id,
+                            toName: profile.name,
+                            profileImage: profile.image,
+                            profileDetails: profile.details
+                        )
                     }
                     DispatchQueue.main.async {
-                        self.incomingLikes = likes
+                        incomingLikes = likes
                     }
                 }
             } else if let error = error {
@@ -125,15 +156,15 @@ struct LikesView: View {
     }
 
     func fetchUserProfiles(for userIDs: [String], completion: @escaping ([UserProfilePreview]) -> Void) {
-        let profileIDs = userIDs.map { CKRecord.ID(recordName: "\($0)_profile") }
-        let operation = CKFetchRecordsOperation(recordIDs: profileIDs)
-
-        var profiles: [UserProfilePreview] = []
+        let recordIDs: [CKRecord.ID] = userIDs.map { CKRecord.ID(recordName: "\($0)_profile") }
+        let operation = CKFetchRecordsOperation(recordIDs: recordIDs)
+        var results: [UserProfilePreview] = []
 
         operation.perRecordResultBlock = { recordID, result in
             if case .success(let record) = result {
                 let id = recordID.recordName.replacingOccurrences(of: "_profile", with: "")
                 let name = record["name"] as? String ?? "Unknown"
+
                 var image: UIImage? = nil
                 if let asset = record["photo1"] as? CKAsset,
                    let url = asset.fileURL,
@@ -141,30 +172,37 @@ struct LikesView: View {
                    let uiImage = UIImage(data: data) {
                     image = uiImage
                 }
-                profiles.append(UserProfilePreview(id: id, name: name, image: image))
+
+                var details: [String: String] = [:]
+                if let visString = record["fieldVisibilities"] as? String,
+                   let data = visString.data(using: .utf8),
+                   let visDict = try? JSONDecoder().decode([String: VisibilitySetting].self, from: data) {
+                    for (field, setting) in visDict where setting == .everyone {
+                        if let value = record[field] as? String {
+                            details[field] = value
+                        }
+                    }
+                }
+
+                results.append(UserProfilePreview(id: id, name: name, image: image, details: details))
             }
         }
 
         operation.fetchRecordsCompletionBlock = { _, _ in
-            completion(profiles)
+            completion(results)
         }
 
         CKContainer.default().publicCloudDatabase.add(operation)
     }
+
     func deleteLike(fromUserID: String) {
-        // Find and delete the existing Like record
         let predicate = NSPredicate(format: "fromUser == %@ AND toUser == %@", fromUserID, currentUserID())
         let query = CKQuery(recordType: "Like", predicate: predicate)
 
-        CKContainer.default().publicCloudDatabase.perform(query, inZoneWith: nil) { records, error in
+        CKContainer.default().publicCloudDatabase.perform(query, inZoneWith: nil) { records, _ in
             if let record = records?.first {
-                CKContainer.default().publicCloudDatabase.delete(withRecordID: record.recordID) { _, error in
-                    if let error = error {
-                        print("❌ Failed to delete like: \(error.localizedDescription)")
-                    } else {
-                        print("🗑️ Like deleted from \(fromUserID)")
-                        blockReLike(fromUserID: fromUserID)
-                    }
+                CKContainer.default().publicCloudDatabase.delete(withRecordID: record.recordID) { _, _ in
+                    blockReLike(fromUserID: fromUserID)
                 }
             }
         }
@@ -174,13 +212,24 @@ struct LikesView: View {
         let record = CKRecord(recordType: "RejectedLike")
         record["blocker"] = currentUserID() as NSString
         record["blockedUser"] = fromUserID as NSString
-        record["expiresAt"] = Calendar.current.date(byAdding: .day, value: 7, to: Date()) as NSDate?
-
+        if let expires = Calendar.current.date(byAdding: .day, value: 7, to: Date()) {
+            record["expiresAt"] = expires as NSDate
+        }
         CKContainer.default().publicCloudDatabase.save(record) { _, error in
             if let error = error {
                 print("❌ Failed to block re-like: \(error.localizedDescription)")
-            } else {
-                print("⛔ Blocked \(fromUserID) from re-liking for 7 days")
+            }
+        }
+    }
+
+    func likeBack(userID: String) {
+        guard let myID = UserDefaults.standard.string(forKey: "appleUserIdentifier") else { return }
+        let record = CKRecord(recordType: "Like")
+        record["fromUser"] = myID as NSString
+        record["toUser"] = userID as NSString
+        CKContainer.default().publicCloudDatabase.save(record) { _, error in
+            if error == nil {
+                dismissCurrentLike()
             }
         }
     }
@@ -189,93 +238,14 @@ struct LikesView: View {
         UserDefaults.standard.string(forKey: "appleUserIdentifier") ?? "unknown"
     }
 
-    func likeBack(userID: String) {
-        guard let myID = UserDefaults.standard.string(forKey: "appleUserIdentifier") else { return }
-
-        let likeRecord = CKRecord(recordType: "Like")
-        likeRecord["fromUser"] = myID as NSString
-        likeRecord["toUser"] = userID as NSString
-
-        CKContainer.default().publicCloudDatabase.save(likeRecord) { _, error in
-            if let error = error {
-                print("❌ Error liking back: \(error.localizedDescription)")
-            } else {
-                print("❤️ Liked back \(userID)")
-                dismissCurrentLike()
-            }
-        }
-    }
     func simulateIncomingLike() {
-        let testLike = Like(
+        let test = Like(
             id: "simUser1",
             toID: "simUser1",
             toName: "Jordan (Test)",
-            profileImage: UIImage(systemName: "person.crop.circle.fill") // placeholder
+            profileImage: UIImage(systemName: "person.crop.circle.fill"),
+            profileDetails: [:]
         )
-        incomingLikes.append(testLike)
-        print("💌 Simulated Like from Jordan")
+        incomingLikes.append(test)
     }
-
-    func simulateMatch() {
-        guard let myID = UserDefaults.standard.string(forKey: "appleUserIdentifier") else { return }
-
-        let userID = "simUser2"
-        let db = CKContainer.default().publicCloudDatabase
-
-        let profile = CKRecord(recordType: "UserProfile", recordID: CKRecord.ID(recordName: "\(userID)_profile"))
-        profile["name"] = "Taylor (Match)" as NSString
-        profile["age"] = 29 as NSNumber
-
-        let like1 = CKRecord(recordType: "Like")
-        like1["fromUser"] = userID as NSString
-        like1["toUser"] = myID as NSString
-
-        let like2 = CKRecord(recordType: "Like")
-        like2["fromUser"] = myID as NSString
-        like2["toUser"] = userID as NSString
-
-        db.save(profile) { _, err1 in
-            db.save(like1) { _, err2 in
-                db.save(like2) { _, err3 in
-                    if err3 == nil {
-                        print("🔥 Simulated match with Taylor")
-                        
-                        let content = UNMutableNotificationContent()
-                        content.title = "🔥 It's a Match!"
-                        content.body = "You and Taylor like each other."
-                        content.sound = .default
-
-                        let request = UNNotificationRequest(
-                            identifier: UUID().uuidString,
-                            content: content,
-                            trigger: nil
-                        )
-
-                        UNUserNotificationCenter.current().add(request) { err in
-                            if let err = err {
-                                print("❌ Failed to deliver local push: \(err.localizedDescription)")
-                            } else {
-                                print("🔔 Local push delivered")
-                            }
-                        }
-                    }
-
-                }
-            }
-        }
-    }
-
-}
-
-struct Like: Identifiable {
-    let id: String
-    let toID: String
-    let toName: String
-    let profileImage: UIImage?
-}
-
-struct UserProfilePreview {
-    let id: String
-    let name: String
-    let image: UIImage?
 }
