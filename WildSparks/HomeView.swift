@@ -1,4 +1,34 @@
 import SwiftUI
+
+struct SectionGrid: View {
+    let title: String
+    let items: [(String, String)]
+    private let columns = [
+        GridItem(.flexible(), spacing: 12),
+        GridItem(.flexible(), spacing: 12)
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.headline)
+                .padding(.bottom, 4)
+
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
+                ForEach(items, id: \.0) { icon, text in
+                    Label(text, systemImage: icon)
+                        .font(.subheadline)
+                        .foregroundColor(.primary)
+                }
+            }
+            .padding()
+            .background(Color.white)
+            .cornerRadius(12)
+            .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+        }
+    }
+}
+import SwiftUI
 import CoreLocation
 import CloudKit
 import UserNotifications
@@ -295,52 +325,60 @@ struct HomeView: View {
             let nearbyUserIDs = locationRecords.compactMap { record -> String? in
                 guard let loc = record["location"] as? CLLocation,
                       let userID = record["userID"] as? String else { return nil }
-                let distance = currentLocation.distance(from: loc)
-                return distance <= selectedRadius ? userID : nil
+                return currentLocation.distance(from: loc) <= selectedRadius ? userID : nil
             }
-
             let references = nearbyUserIDs.map {
                 CKRecord.Reference(recordID: CKRecord.ID(recordName: "\($0)_location"), action: .none)
             }
 
-            let profileQuery = CKQuery(recordType: "UserProfile", predicate: NSPredicate(format: "userReference IN %@", references))
+            let profileQuery = CKQuery(recordType: "UserProfile",
+                                       predicate: NSPredicate(format: "userReference IN %@", references))
             CKContainer.default().publicCloudDatabase.perform(profileQuery, inZoneWith: nil) { profileRecords, _ in
                 guard let profileRecords = profileRecords else { return }
 
                 var results: [NearbyUser] = []
-
-                for record in profileRecords {
-                    guard let ref = record["userReference"] as? CKRecord.Reference else { continue }
-
+                for rec in profileRecords {
+                    guard let ref = rec["userReference"] as? CKRecord.Reference else { continue }
                     let id = ref.recordID.recordName
-                    let name = record["name"] as? String ?? "Unknown"
+                    let name = rec["name"] as? String ?? "Unknown"
 
+                    // load a primary image if you want one separately:
                     var image: UIImage? = nil
-                    if let asset = record["photo1"] as? CKAsset,
+                    if let asset = rec["photo1"] as? CKAsset,
                        let url = asset.fileURL,
                        let data = try? Data(contentsOf: url),
-                       let uiImage = UIImage(data: data) {
-                        image = uiImage
+                       let ui = UIImage(data: data) {
+                        image = ui
                     }
 
-                    let visRaw = record["fieldVisibilities"] as? String ?? "{}"
-                    let visData = (try? JSONSerialization.jsonObject(with: Data(visRaw.utf8))) as? [String: String] ?? [:]
-
-                    var allData: [String: String] = [:]
-                    for key in record.allKeys() {
-                        if let str = record[key] as? String {
-                            allData[key] = str
-                        } else if let num = record[key] as? NSNumber {
-                            allData[key] = num.stringValue
+                    // load all photos into an array
+                    var photos: [UIImage] = []
+                    for i in 1...6 {
+                        if let asset = rec["photo\(i)"] as? CKAsset,
+                           let url = asset.fileURL,
+                           let data = try? Data(contentsOf: url),
+                           let uiImage = UIImage(data: data) {
+                            photos.append(uiImage)
                         }
+                    }
+
+                    // parse fullProfile & fieldVisibilities as before…
+                    let visRaw = rec["fieldVisibilities"] as? String ?? "{}"
+                    let visData = (try? JSONSerialization.jsonObject(with: Data(visRaw.utf8)))
+                                  as? [String: String] ?? [:]
+                    var allData: [String: String] = [:]
+                    for key in rec.allKeys() {
+                        if let s = rec[key] as? String { allData[key] = s }
+                        else if let n = rec[key] as? NSNumber { allData[key] = n.stringValue }
                     }
 
                     results.append(NearbyUser(
                         id: id,
                         name: name,
-                        profileImage: image,
+                        profileImage: image,           // now `image` exists
                         fullProfile: allData,
-                        fieldVisibilities: visData
+                        fieldVisibilities: visData,
+                        photos: photos                  // and this is your [UIImage]
                     ))
                 }
 
@@ -572,45 +610,145 @@ struct NearbyUser: Identifiable {
     let profileImage: UIImage?
     let fullProfile: [String: String]
     let fieldVisibilities: [String: String]
+    let photos: [UIImage]
 }
 
 struct ProfileCardView: View {
-    let user: NearbyUser
+    let user: NearbyUser          // NearbyUser(id:, name:, profileImage:, fullProfile:, fieldVisibilities:, photos:)
     let onClose: () -> Void
+
+    @State private var fullScreenImage: ImageWrapper?
+
+    private var visibleKeys: Set<String> {
+        Set(user.fieldVisibilities
+            .filter { $0.value.lowercased() == "everyone" }
+            .map { $0.key })
+    }
+
+    private var aboutItems: [(String, String)] {
+        var items: [(String, String)] = []
+        if visibleKeys.contains("name") {
+            items.append(("person", user.name))
+        }
+        if visibleKeys.contains("age"), let age = user.fullProfile["age"] {
+            items.append(("number", "\(age) yrs"))
+        }
+        if visibleKeys.contains("height"), let h = user.fullProfile["height"] {
+            items.append(("ruler", h))
+        }
+        if visibleKeys.contains("email"), let e = user.fullProfile["email"] {
+            items.append(("envelope", e))
+        }
+        if visibleKeys.contains("phoneNumber"), let p = user.fullProfile["phoneNumber"] {
+            items.append(("phone", p))
+        }
+        return items
+    }
+
+    private var lifestyleItems: [(String, String)] {
+        var items: [(String, String)] = []
+        if visibleKeys.contains("drinks"), user.fullProfile["drinks"] == "1" {
+            items.append(("wineglass", "Drinks"))
+        }
+        if visibleKeys.contains("smokes"), user.fullProfile["smokes"] == "1" {
+            items.append(("smoke", "Smokes"))
+        }
+        if visibleKeys.contains("smokesWeed"), user.fullProfile["smokesWeed"] == "1" {
+            items.append(("leaf", "Smokes Weed"))
+        }
+        if visibleKeys.contains("usesDrugs"), user.fullProfile["usesDrugs"] == "1" {
+            items.append(("pills", "Uses Drugs"))
+        }
+        if visibleKeys.contains("pets"), let pets = user.fullProfile["pets"], !pets.isEmpty {
+            items.append(("pawprint", "Pets: \(pets)"))
+        }
+        if visibleKeys.contains("hasChildren"), user.fullProfile["hasChildren"] == "1" {
+            items.append(("person.2", "Has Children"))
+        }
+        if visibleKeys.contains("wantsChildren"), user.fullProfile["wantsChildren"] == "1" {
+            items.append(("figure.wave", "Wants Children"))
+        }
+        return items
+    }
+
+    private var backgroundItems: [(String, String)] {
+        [
+            ("hands.sparkles", "Religion: \(user.fullProfile["religion"] ?? "")"),
+            ("globe", "Ethnicity: \(user.fullProfile["ethnicity"] ?? "")"),
+            ("house", "Lives in: \(user.fullProfile["hometown"] ?? "")"),
+            ("person.3.sequence", "Politics: \(user.fullProfile["politicalView"] ?? "")"),
+            ("star", "Zodiac: \(user.fullProfile["zodiacSign"] ?? "")"),
+            ("bubble.left.and.bubble.right", "Languages: \(user.fullProfile["languagesSpoken"] ?? "")")
+        ].filter { visibleKeys.contains(self.key(for: $0.1)) }
+    }
+
+    private var workItems: [(String, String)] {
+        [
+            ("graduationcap", "Education: \(user.fullProfile["educationLevel"] ?? "")"),
+            ("building.columns", "College: \(user.fullProfile["college"] ?? "")"),
+            ("briefcase", "Job: \(user.fullProfile["jobTitle"] ?? "")"),
+            ("building.2", "Company: \(user.fullProfile["companyName"] ?? "")")
+        ].filter { visibleKeys.contains(self.key(for: $0.1)) }
+    }
+
+    private var datingItems: [(String, String)] {
+        [
+            ("heart", "Interested In: \(user.fullProfile["interestedIn"] ?? "")"),
+            ("hands.sparkles", "Intentions: \(user.fullProfile["datingIntentions"] ?? "")"),
+            ("book.closed", "Relationship: \(user.fullProfile["relationshipType"] ?? "")")
+        ].filter { visibleKeys.contains(self.key(for: $0.1)) }
+    }
+
+    private var extrasItems: [(String, String)] {
+        [
+            ("link", "Socials: \(user.fullProfile["socialMediaLinks"] ?? "")"),
+            ("megaphone", "Engagement: \(user.fullProfile["politicalEngagementLevel"] ?? "")"),
+            ("fork.knife", "Diet: \(user.fullProfile["dietaryPreferences"] ?? "")"),
+            ("figure.walk", "Exercise: \(user.fullProfile["exerciseHabits"] ?? "")"),
+            ("star.fill", "Interests: \(user.fullProfile["interests"] ?? "")")
+        ].filter { visibleKeys.contains(self.key(for: $0.1)) }
+    }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                if let image = user.profileImage {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 220, height: 300)
-                        .clipShape(RoundedRectangle(cornerRadius: 20))
-                }
-                Text("\(user.name)\(user.fullProfile["age"].flatMap { ", \($0)" } ?? "")")
-                    .font(.title2.weight(.bold))
-
-
-
-                ForEach(visibleFields(), id: \.self) { key in
-                    if let value = user.fullProfile[key] {
-                        HStack {
-                            Text(label(for: key))
-                                .fontWeight(.semibold)
-                            Spacer()
-                            Text(value)
-                                .foregroundColor(.gray)
+                // Photos carousel
+                if !user.photos.isEmpty {
+                    TabView {
+                        ForEach(user.photos.indices, id: \.self) { idx in
+                            Image(uiImage: user.photos[idx])
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 220, height: 300)
+                                .clipShape(RoundedRectangle(cornerRadius: 20))
+                                .shadow(radius: 5)
+                                .onTapGesture {
+                                    fullScreenImage = ImageWrapper(ui: user.photos[idx])
+                                }
                         }
-                        .padding(.horizontal)
                     }
+                    .frame(height: 300)
+                    .tabViewStyle(PageTabViewStyle())
                 }
 
-                Button("Close") {
-                    onClose()
+                // Name + age
+                if visibleKeys.contains("name") || visibleKeys.contains("age") {
+                    Text("\(user.name)\(user.fullProfile["age"].flatMap { ", \($0)" } ?? "")")
+                        .font(.title2).bold()
                 }
-                .buttonStyle(.bordered)
-                .padding(.top)
+
+                // Sections
+                if !aboutItems.isEmpty     { SectionGrid(title: "About Me", items: aboutItems) }
+                if !lifestyleItems.isEmpty { SectionGrid(title: "Lifestyle", items: lifestyleItems) }
+                if !backgroundItems.isEmpty{ SectionGrid(title: "Background", items: backgroundItems) }
+                if !workItems.isEmpty      { SectionGrid(title: "Work & Education", items: workItems) }
+                if !datingItems.isEmpty    { SectionGrid(title: "Dating Preferences", items: datingItems) }
+                if !extrasItems.isEmpty    { SectionGrid(title: "More About Me", items: extrasItems) }
+
+                // Close button
+                Button("Close") { onClose() }
+                    .buttonStyle(.bordered)
+                    .padding(.top, 12)
             }
             .padding()
         }
@@ -618,15 +756,33 @@ struct ProfileCardView: View {
         .cornerRadius(20)
         .shadow(radius: 10)
         .padding()
+        .fullScreenCover(item: $fullScreenImage) { wrapper in
+            ZStack(alignment: .topLeading) {
+                Color.black.ignoresSafeArea()
+
+                Image(uiImage: wrapper.ui)
+                    .resizable()
+                    .scaledToFit()                       // shows entire image
+                    .frame(maxWidth: .infinity,
+                           maxHeight: .infinity)
+                    .background(Color.black)            // fill any extra space
+                    .ignoresSafeArea()
+
+                Button(action: { fullScreenImage = nil }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 40))
+                        .foregroundColor(.white)
+                }
+                .padding(.top, 60)
+                .padding(.leading, 20)
+            }
+        }
     }
 
-    func visibleFields() -> [String] {
-        user.fieldVisibilities.filter { $0.value == "Everyone" }.map { $0.key }.sorted()
-    }
-
-    func label(for key: String) -> String {
-        key.replacingOccurrences(of: "(?<=\\w)([A-Z])", with: " $1", options: .regularExpression)
-            .capitalized
+    private func key(for text: String) -> String {
+        text.lowercased()
+            .components(separatedBy: ":")[0]
+            .replacingOccurrences(of: " ", with: "")
     }
 }
 

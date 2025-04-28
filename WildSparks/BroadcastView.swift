@@ -189,11 +189,6 @@ struct BroadcastView: View {
                                 .font(.footnote).foregroundColor(.secondary)
                         }
 
-                        if broadcastsLeft==0 {
-                            Button("Add Test Broadcast", action: addTestBroadcast)
-                                .font(.footnote).foregroundColor(.blue)
-                                .padding(.top,4)
-                        }
                     }
                 }
                 .padding(.vertical,10).padding(.horizontal,16)
@@ -201,7 +196,7 @@ struct BroadcastView: View {
                 .clipShape(RoundedRectangle(cornerRadius:18))
                 .shadow(radius:10)
                 .padding(.horizontal,20)
-                .padding(.bottom,6)
+                .padding(.bottom,20)
             }
         }
         // MARK: - Message Sheet
@@ -474,22 +469,6 @@ struct BroadcastView: View {
         }
     }
 
-    // MARK: - Test Broadcast
-
-    private func addTestBroadcast() {
-        guard let uid = UserDefaults.standard.string(forKey: "appleUserIdentifier"),
-              let loc = locationManager.currentLocation else { return }
-        let rec = CKRecord(recordType: "Broadcast")
-        rec["location"]  = loc
-        rec["userID"]    = uid as NSString
-        rec["expiresAt"] = Date().addingTimeInterval(60) as NSDate
-        rec["message"]   = "Test Broadcast"
-        rec["age"]       = 18 as NSNumber
-        rec["ethnicity"] = "White" as NSString
-        CKContainer.default().publicCloudDatabase.save(rec) { _, _ in
-            DispatchQueue.main.async { loadNearbyBroadcasts() }
-        }
-    }
 
     // MARK: - Load & Filter Broadcasts
 

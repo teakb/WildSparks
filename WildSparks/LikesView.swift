@@ -2,33 +2,37 @@ import SwiftUI
 import CloudKit
 import UserNotifications
 
+
+// MARK: - Like model with multiple photos
 struct Like: Identifiable {
     let id: String
     let toID: String
     let toName: String
-    let profileImage: UIImage?
+    let photos: [UIImage]
     let profileDetails: [String: String]
 }
 
+// MARK: - Internal preview type
 struct UserProfilePreview {
     let id: String
     let name: String
-    let image: UIImage?
+    let photos: [UIImage]
     let details: [String: String]
 }
 
 struct LikesView: View {
     @State private var incomingLikes: [Like] = []
     @State private var currentIndex = 0
+    @State private var fullScreenImage: ImageWrapper?
 
     var body: some View {
         NavigationStack {
             ZStack {
                 Color(.systemBackground).ignoresSafeArea()
-
+                
                 if incomingLikes.isEmpty {
                     VStack(spacing: 12) {
-                        Text("No likes yet...")
+                        Text("No likes yet…")
                             .font(.title2)
                             .foregroundColor(.gray)
                         Text("Head over to Nearby or Broadcast to catch someone’s eye!")
@@ -38,67 +42,127 @@ struct LikesView: View {
                             .padding(.horizontal)
                     }
                     .padding(.top, 50)
+                    
                 } else {
                     let current = incomingLikes[currentIndex]
-                    VStack {
-                        ScrollView {
-                            VStack(spacing: 20) {
-                                if let image = current.profileImage {
-                                    Image(uiImage: image)
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(width: 300, height: 300)
-                                        .clipShape(RoundedRectangle(cornerRadius: 20))
-                                        .shadow(radius: 5)
-                                }
-
-                                Text(current.toName)
-                                    .font(.title)
-                                    .bold()
-
-                                VStack(alignment: .leading, spacing: 8) {
-                                    ForEach(current.profileDetails.sorted(by: { $0.key < $1.key }), id: \.key) { key, value in
-                                        HStack(alignment: .top) {
-                                            Text("\(key.capitalized):")
-                                                .bold()
-                                            Text(value)
-                                                .fixedSize(horizontal: false, vertical: true)
-                                        }
+                    
+                    ScrollView {
+                        VStack(spacing: 16) {
+                            // Photos carousel with tap to enlarge
+                            if !current.photos.isEmpty {
+                                TabView {
+                                    ForEach(current.photos.indices, id: \.self) { idx in
+                                        Image(uiImage: current.photos[idx])
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: 220, height: 300)
+                                            .clipShape(RoundedRectangle(cornerRadius: 20))
+                                            .shadow(radius: 5)
+                                            .onTapGesture {
+                                                fullScreenImage = ImageWrapper(ui: current.photos[idx])
+                                            }
                                     }
                                 }
-                                .padding()
-                                .background(RoundedRectangle(cornerRadius: 12).fill(Color(.secondarySystemBackground)))
+                                .frame(height: 300)
+                                .tabViewStyle(PageTabViewStyle())
                             }
-                            .padding()
+                            
+                            Text(current.toName)
+                                .font(.title2)
+                                .bold()
+                            
+                            let details = current.profileDetails
+                            
+                            // Build sections
+                            let aboutItems: [(String, String)] = {
+                                var a: [(String, String)] = []
+                                if let n = details["name"]         { a.append(("person", n)) }
+                                if let age = details["age"]        { a.append(("number", "\(age) yrs")) }
+                                if let height = details["height"]  { a.append(("ruler", height)) }
+                                if let email = details["email"]    { a.append(("envelope", email)) }
+                                if let phone = details["phoneNumber"] { a.append(("phone", phone)) }
+                                return a
+                            }()
+                            
+                            let lifestyleItems: [(String, String)] = {
+                                var a: [(String, String)] = []
+                                if details["drinks"] == "1"     { a.append(("wineglass", "Drinks")) }
+                                if details["smokes"] == "1"     { a.append(("smoke", "Smokes")) }
+                                if details["smokesWeed"] == "1" { a.append(("leaf", "Smokes Weed")) }
+                                if details["usesDrugs"] == "1"  { a.append(("pills", "Uses Drugs")) }
+                                if let pets = details["pets"], !pets.isEmpty { a.append(("pawprint", "Pets: \(pets)")) }
+                                if details["hasChildren"] == "1"{ a.append(("person.2", "Has Children")) }
+                                if details["wantsChildren"] == "1"{ a.append(("figure.wave", "Wants Children")) }
+                                return a
+                            }()
+                            
+                            let backgroundItems: [(String, String)] = [
+                                ("hands.sparkles", "Religion: \(details["religion"] ?? "")"),
+                                ("globe", "Ethnicity: \(details["ethnicity"] ?? "")"),
+                                ("house", "Lives in: \(details["hometown"] ?? "")"),
+                                ("person.3.sequence", "Politics: \(details["politicalView"] ?? "")"),
+                                ("star", "Zodiac: \(details["zodiacSign"] ?? "")"),
+                                ("bubble.left.and.bubble.right", "Languages: \(details["languagesSpoken"] ?? "")")
+                            ]
+                            
+                            let workItems: [(String, String)] = [
+                                ("graduationcap", "Education: \(details["educationLevel"] ?? "")"),
+                                ("building.columns", "College: \(details["college"] ?? "")"),
+                                ("briefcase", "Job: \(details["jobTitle"] ?? "")"),
+                                ("building.2", "Company: \(details["companyName"] ?? "")")
+                            ]
+                            
+                            let datingItems: [(String, String)] = [
+                                ("heart", "Interested In: \(details["interestedIn"] ?? "")"),
+                                ("hands.sparkles", "Intentions: \(details["datingIntentions"] ?? "")"),
+                                ("book.closed", "Relationship: \(details["relationshipType"] ?? "")")
+                            ]
+                            
+                            let extrasItems: [(String, String)] = [
+                                ("link", "Socials: \(details["socialMediaLinks"] ?? "")"),
+                                ("megaphone", "Engagement: \(details["politicalEngagementLevel"] ?? "")"),
+                                ("fork.knife", "Diet: \(details["dietaryPreferences"] ?? "")"),
+                                ("figure.walk", "Exercise: \(details["exerciseHabits"] ?? "")"),
+                                ("star.fill", "Interests: \(details["interests"] ?? "")")
+                            ]
+                            
+                            if !aboutItems.isEmpty     { SectionGrid(title: "About Me", items: aboutItems) }
+                            if !lifestyleItems.isEmpty { SectionGrid(title: "Lifestyle", items: lifestyleItems) }
+                            if !backgroundItems.isEmpty{ SectionGrid(title: "Background", items: backgroundItems) }
+                            if !workItems.isEmpty       { SectionGrid(title: "Work & Education", items: workItems) }
+                            if !datingItems.isEmpty     { SectionGrid(title: "Dating Preferences", items: datingItems) }
+                            if !extrasItems.isEmpty     { SectionGrid(title: "More About Me", items: extrasItems) }
                         }
-
-                        Spacer()
-
+                        .padding()
+                    }
+                    // Sticky overlapping action buttons
+                    .overlay(
                         HStack {
                             Button {
-                                deleteLike(fromUserID: current.toID)
+                                let cur = incomingLikes[currentIndex]
+                                deleteLike(fromUserID: cur.toID)
                                 dismissCurrentLike()
                             } label: {
                                 Image(systemName: "xmark.circle.fill")
                                     .resizable()
-                                    .frame(width: 60, height: 60)
+                                    .frame(width: 70, height: 70)
                                     .foregroundColor(.red)
                             }
-
                             Spacer()
-
                             Button {
-                                likeBack(userID: current.toID)
+                                let cur = incomingLikes[currentIndex]
+                                likeBack(userID: cur.toID)
                             } label: {
                                 Image(systemName: "heart.circle.fill")
                                     .resizable()
-                                    .frame(width: 60, height: 60)
+                                    .frame(width: 70, height: 70)
                                     .foregroundColor(.pink)
                             }
                         }
-                        .padding(.horizontal, 40)
-                        .padding(.bottom, 30)
-                    }
+                            .padding(.horizontal, 40)
+                            .padding(.bottom, 30),
+                        alignment: .bottom
+                    )
                 }
             }
             .navigationTitle("Likes")
@@ -112,13 +176,36 @@ struct LikesView: View {
             .onAppear {
                 fetchIncomingLikes()
             }
+            .fullScreenCover(item: $fullScreenImage) { wrapper in
+                ZStack(alignment: .topLeading) {
+                    Color.black.ignoresSafeArea()
+                    
+                    Image(uiImage: wrapper.ui)
+                        .resizable()
+                        .scaledToFit()                       // show entire image, centered
+                        .frame(maxWidth: .infinity,
+                               maxHeight: .infinity)
+                        .background(Color.black)            // fill any extra space
+                        .ignoresSafeArea()
+                    
+                    Button(action: { fullScreenImage = nil }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 40))
+                            .foregroundColor(.white)
+                    }
+                    .padding(.top, 60)
+                    .padding(.leading, 20)
+                }
+            }
         }
         .tabItem {
             Label("Likes", systemImage: "heart")
         }
     }
 
-    func dismissCurrentLike() {
+    // MARK: - Helpers
+
+    private func dismissCurrentLike() {
         if !incomingLikes.isEmpty {
             incomingLikes.remove(at: currentIndex)
             if currentIndex >= incomingLikes.count {
@@ -127,125 +214,123 @@ struct LikesView: View {
         }
     }
 
-    func fetchIncomingLikes() {
+    private func fetchIncomingLikes() {
         guard let userID = UserDefaults.standard.string(forKey: "appleUserIdentifier") else { return }
-        let predicate = NSPredicate(format: "toUser == %@", userID)
-        let query = CKQuery(recordType: "Like", predicate: predicate)
-
-        CKContainer.default().publicCloudDatabase.perform(query, inZoneWith: nil) { records, error in
-            if let records = records {
-                let fromUserIDs: [String] = records.compactMap { $0["fromUser"] as? String }
-                fetchUserProfiles(for: fromUserIDs) { profiles in
-                    let likes = profiles.map { profile in
+        let query = CKQuery(recordType: "Like", predicate: NSPredicate(format: "toUser == %@", userID))
+        CKContainer.default().publicCloudDatabase.perform(query, inZoneWith: nil) { records, _ in
+            let fromIDs = records?.compactMap { $0["fromUser"] as? String } ?? []
+            fetchUserProfiles(for: fromIDs) { previews in
+                DispatchQueue.main.async {
+                    incomingLikes = previews.map {
                         Like(
-                            id: profile.id,
-                            toID: profile.id,
-                            toName: profile.name,
-                            profileImage: profile.image,
-                            profileDetails: profile.details
+                            id: $0.id,
+                            toID: $0.id,
+                            toName: $0.name,
+                            photos: $0.photos,
+                            profileDetails: $0.details
                         )
                     }
-                    DispatchQueue.main.async {
-                        incomingLikes = likes
-                    }
                 }
-            } else if let error = error {
-                print("❌ Error fetching likes: \(error.localizedDescription)")
             }
         }
     }
 
-    func fetchUserProfiles(for userIDs: [String], completion: @escaping ([UserProfilePreview]) -> Void) {
-        let recordIDs: [CKRecord.ID] = userIDs.map { CKRecord.ID(recordName: "\($0)_profile") }
-        let operation = CKFetchRecordsOperation(recordIDs: recordIDs)
+    private func fetchUserProfiles(for userIDs: [String], completion: @escaping ([UserProfilePreview]) -> Void) {
+        let recordIDs = userIDs.map { CKRecord.ID(recordName: "\($0)_profile") }
+        let op = CKFetchRecordsOperation(recordIDs: recordIDs)
         var results: [UserProfilePreview] = []
 
-        operation.perRecordResultBlock = { recordID, result in
-            if case .success(let record) = result {
+        op.perRecordResultBlock = { recordID, result in
+            if case .success(let rec) = result {
                 let id = recordID.recordName.replacingOccurrences(of: "_profile", with: "")
-                let name = record["name"] as? String ?? "Unknown"
-
-                var image: UIImage? = nil
-                if let asset = record["photo1"] as? CKAsset,
-                   let url = asset.fileURL,
-                   let data = try? Data(contentsOf: url),
-                   let uiImage = UIImage(data: data) {
-                    image = uiImage
+                let name = rec["name"] as? String ?? "Unknown"
+                var photos: [UIImage] = []
+                for i in 1...6 {
+                    if let asset = rec["photo\(i)"] as? CKAsset,
+                       let url = asset.fileURL,
+                       let data = try? Data(contentsOf: url),
+                       let uiImage = UIImage(data: data) {
+                        photos.append(uiImage)
+                    }
                 }
-
                 var details: [String: String] = [:]
-                if let visString = record["fieldVisibilities"] as? String,
-                   let data = visString.data(using: .utf8),
-                   let visDict = try? JSONDecoder().decode([String: VisibilitySetting].self, from: data) {
-                    for (field, setting) in visDict where setting == .everyone {
-                        if let value = record[field] as? String {
-                            details[field] = value
+                if let visString = rec["fieldVisibilities"] as? String,
+                   let dict = try? JSONDecoder().decode([String: String].self, from: Data(visString.utf8)) {
+                    for (field, setting) in dict where setting.lowercased() == "everyone" {
+                        if let val = rec[field] as? String {
+                            details[field] = val
                         }
                     }
                 }
-
-                results.append(UserProfilePreview(id: id, name: name, image: image, details: details))
+                results.append(UserProfilePreview(id: id, name: name, photos: photos, details: details))
             }
         }
 
-        operation.fetchRecordsCompletionBlock = { _, _ in
-            completion(results)
+        op.fetchRecordsCompletionBlock = { _, _ in
+            DispatchQueue.main.async { completion(results) }
         }
 
-        CKContainer.default().publicCloudDatabase.add(operation)
+        CKContainer.default().publicCloudDatabase.add(op)
     }
 
-    func deleteLike(fromUserID: String) {
-        let predicate = NSPredicate(format: "fromUser == %@ AND toUser == %@", fromUserID, currentUserID())
+    private func deleteLike(fromUserID: String) {
+        guard let me = UserDefaults.standard.string(forKey: "appleUserIdentifier") else { return }
+        let predicate = NSPredicate(format: "fromUser == %@ AND toUser == %@", fromUserID, me)
         let query = CKQuery(recordType: "Like", predicate: predicate)
-
-        CKContainer.default().publicCloudDatabase.perform(query, inZoneWith: nil) { records, _ in
-            if let record = records?.first {
-                CKContainer.default().publicCloudDatabase.delete(withRecordID: record.recordID) { _, _ in
+        CKContainer.default().publicCloudDatabase.perform(query, inZoneWith: nil) { recs, _ in
+            if let rec = recs?.first {
+                CKContainer.default().publicCloudDatabase.delete(withRecordID: rec.recordID) { _, _ in
                     blockReLike(fromUserID: fromUserID)
                 }
             }
         }
     }
 
-    func blockReLike(fromUserID: String) {
+    private func blockReLike(fromUserID: String) {
+        guard let me = UserDefaults.standard.string(forKey: "appleUserIdentifier") else { return }
         let record = CKRecord(recordType: "RejectedLike")
-        record["blocker"] = currentUserID() as NSString
+        record["blocker"] = me as NSString
         record["blockedUser"] = fromUserID as NSString
-        if let expires = Calendar.current.date(byAdding: .day, value: 7, to: Date()) {
-            record["expiresAt"] = expires as NSDate
+        if let exp = Calendar.current.date(byAdding: .day, value: 7, to: Date()) {
+            record["expiresAt"] = exp as NSDate
         }
-        CKContainer.default().publicCloudDatabase.save(record) { _, error in
-            if let error = error {
-                print("❌ Failed to block re-like: \(error.localizedDescription)")
-            }
-        }
+        CKContainer.default().publicCloudDatabase.save(record) { _, _ in }
     }
 
-    func likeBack(userID: String) {
-        guard let myID = UserDefaults.standard.string(forKey: "appleUserIdentifier") else { return }
-        let record = CKRecord(recordType: "Like")
-        record["fromUser"] = myID as NSString
-        record["toUser"] = userID as NSString
-        CKContainer.default().publicCloudDatabase.save(record) { _, error in
-            if error == nil {
-                dismissCurrentLike()
-            }
+    private func likeBack(userID: String) {
+        guard let me = UserDefaults.standard.string(forKey: "appleUserIdentifier") else { return }
+        let rec = CKRecord(recordType: "Like")
+        rec["fromUser"] = me as NSString
+        rec["toUser"] = userID as NSString
+        CKContainer.default().publicCloudDatabase.save(rec) { _, _ in
+            dismissCurrentLike()
         }
     }
 
-    func currentUserID() -> String {
-        UserDefaults.standard.string(forKey: "appleUserIdentifier") ?? "unknown"
-    }
-
-    func simulateIncomingLike() {
+    private func simulateIncomingLike() {
         let test = Like(
             id: "simUser1",
             toID: "simUser1",
             toName: "Jordan (Test)",
-            profileImage: UIImage(systemName: "person.crop.circle.fill"),
-            profileDetails: [:]
+            photos: [UIImage(systemName: "person.crop.circle.fill")!],
+            profileDetails: ["age": "28", "email": "jordan@test.com"]
         )
         incomingLikes.append(test)
+    }
+
+    private func key(for text: String) -> String {
+        text
+            .lowercased()
+            .components(separatedBy: ":")
+            .first?
+            .replacingOccurrences(of: " ", with: "") ?? ""
+    }
+}
+
+
+
+struct LikesView_Previews: PreviewProvider {
+    static var previews: some View {
+        LikesView()
     }
 }
