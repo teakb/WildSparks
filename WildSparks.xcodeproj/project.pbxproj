@@ -203,6 +203,14 @@
 				TargetAttributes = {
 					F045AA832D7DE2B8009DECE1 = {
 						CreatedOnToolsVersion = 16.3;
+						SystemCapabilities = {
+							com.apple.InAppPurchase = {
+								enabled = 1;
+							};
+							com.apple.StoreKit = {
+								enabled = 1;
+							};
+						};
 					};
 					F045AA912D7DE2BA009DECE1 = {
 						CreatedOnToolsVersion = 16.3;
