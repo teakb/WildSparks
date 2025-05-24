@@ -3,6 +3,9 @@ import AuthenticationServices
 import CloudKit
 
 struct OnboardingView: View {
+    @EnvironmentObject var userProfile: UserProfile // Add this
+    @EnvironmentObject var locationManager: LocationManager // Add this
+    @EnvironmentObject var storeManager: StoreManager // Add this
     @State private var isSignedIn = false
     @State private var isNewUser = false
     @State private var navigateToHome = false
@@ -13,20 +16,17 @@ struct OnboardingView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                // Background Color
                 Color(.systemBackground)
                     .edgesIgnoringSafeArea(.all)
                 
                 VStack(spacing: 40) {
                     Spacer()
                     
-                    // App Logo or Title
                     Text("WildSpark")
                         .font(.largeTitle)
                         .fontWeight(.bold)
                         .foregroundColor(.primary)
                     
-                    // Welcome Message
                     Text("Flirt, Connect, Spark.")
                         .font(.headline)
                         .foregroundColor(.secondary)
@@ -62,7 +62,6 @@ struct OnboardingView: View {
                     
                     Spacer()
                     
-                    // Terms & Privacy Notice
                     VStack(spacing: 5) {
                         Text("By signing in, you agree to our")
                             .font(.footnote)
@@ -93,19 +92,22 @@ struct OnboardingView: View {
                     }
                 }
             }
-            // ✅ Navigate to Home if profile exists
             .navigationDestination(isPresented: $navigateToHome) {
                 ContentView()
+                    .environmentObject(userProfile) // Pass environment objects
+                    .environmentObject(locationManager)
+                    .environmentObject(storeManager)
             }
-            // ✅ Navigate to OnboardingForm if no profile exists
             .navigationDestination(isPresented: $navigateToOnboardingForm) {
                 OnboardingForm()
+                    .environmentObject(userProfile) // Pass environment objects
+                    .environmentObject(locationManager)
+                    .environmentObject(storeManager)
             }
             .animation(.easeInOut, value: isSignedIn)
         }
     }
     
-    // ✅ Checks CloudKit for an existing user profile
     private func checkForExistingProfile() {
         guard let userIdentifier = UserDefaults.standard.string(forKey: "appleUserIdentifier") else {
             print("No userIdentifier found")
@@ -128,7 +130,6 @@ struct OnboardingView: View {
 }
 
 class SignInWithAppleManager: NSObject, ASAuthorizationControllerDelegate {
-    
     func handleAuthorization(_ authorization: ASAuthorization, completion: @escaping (Bool) -> Void) {
         if let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential {
             let userIdentifier = appleIDCredential.user
@@ -139,10 +140,8 @@ class SignInWithAppleManager: NSObject, ASAuthorizationControllerDelegate {
             print("Full Name: \(fullName?.givenName ?? "") \(fullName?.familyName ?? "")")
             print("Email: \(email ?? "")")
             
-            // Save userIdentifier to UserDefaults
             UserDefaults.standard.set(userIdentifier, forKey: "appleUserIdentifier")
             
-            // Save to CloudKit
             let recordID = CKRecord.ID(recordName: userIdentifier)
             let record = CKRecord(recordType: "User", recordID: recordID)
             record["fullName"] = "\(fullName?.givenName ?? "") \(fullName?.familyName ?? "")" as NSString
@@ -185,4 +184,7 @@ class SignInWithAppleManager: NSObject, ASAuthorizationControllerDelegate {
 
 #Preview {
     OnboardingView()
+        .environmentObject(UserProfile())
+        .environmentObject(LocationManager())
+        .environmentObject(StoreManager())
 }

@@ -1,102 +1,197 @@
 import SwiftUI
 import CloudKit
-import PhotosUI   // ← add this
+import PhotosUI
 
 // MARK: Helper models
-struct MessagePreview { let text: String; let date: Date; let fromUser: String }
-struct Match: Identifiable { let id: String; var name: String; var image: UIImage? }
+struct MessagePreview {
+    let text: String
+    let date: Date
+    let fromUser: String
+    let isMe: Bool
+}
+
+struct Match: Identifiable {
+    let id: String
+    var name: String
+    var image: UIImage?
+}
 
 // MARK: MatchesView
 struct MatchesView: View {
     @State private var matches: [Match] = []
     @State private var previews: [String: MessagePreview] = [:]
     @State private var unread: Set<String> = []
+    @State private var filter: FilterOption = .all
+
+    enum FilterOption: String, CaseIterable, Identifiable {
+        case all = "All"
+        case ourTurn = "My Turn"
+        case theirTurn = "Their Turn"
+        var id: String { rawValue }
+    }
+
+    var filteredMatches: [Match] {
+        switch filter {
+        case .all:
+            return matches
+        case .ourTurn:
+            return matches.filter { match in
+                if let preview = previews[match.id] {
+                    return !preview.isMe // Other user sent last message
+                }
+                return false
+            }
+        case .theirTurn:
+            return matches.filter { match in
+                if let preview = previews[match.id] {
+                    return preview.isMe // We sent last message
+                }
+                return false
+            }
+        }
+    }
 
     var body: some View {
         NavigationStack {
-            VStack {
+            VStack(spacing: 0) {
+                // Custom Title
+                Text("Matches")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                    .foregroundColor(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                    .padding(.bottom, 4)
+
+                // Custom Filter Picker
+                Picker("Filter", selection: $filter) {
+                    ForEach(FilterOption.allCases) { option in
+                        Text(option.rawValue)
+                            .tag(option)
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(Color(.systemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .shadow(radius: 2)
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+
                 if matches.isEmpty {
                     Spacer()
-                    Text("No Matches Yet!\nHead over to Nearby or Broadcast to catch someone’s eye.")
-                        .multilineTextAlignment(.center)
-                        .font(.title3)
-                        .foregroundColor(.secondary)
-                        .padding()
+                    VStack(spacing: 12) {
+                        Image(systemName: "heart.slash")
+                            .font(.system(size: 48))
+                            .foregroundColor(.gray.opacity(0.5))
+                        Text("No Matches Yet!")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.primary)
+                        Text("Head over to Nearby or Broadcast to catch someone’s eye.")
+                            .font(.subheadline)
+                            .multilineTextAlignment(.center)
+                            .foregroundColor(.secondary)
+                            .padding(.horizontal)
+                    }
                     Spacer()
                 } else {
-                    List(matches) { match in
-                        NavigationLink {
-                            MatchDetailView(match: match)
-                                .onAppear {
-                                    markChatRead(with: match.id)
-                                }
-                        } label: {
-                            HStack(spacing: 12) {
-                                if let ui = match.image {
-                                    Image(uiImage: ui)
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(width: 50, height: 50)
-                                        .clipShape(Circle())
-                                } else {
-                                    Circle()
-                                        .fill(Color.gray.opacity(0.25))
-                                        .frame(width: 50, height: 50)
-                                }
-                                VStack(alignment: .leading, spacing: 4) {
-                                    HStack {
-                                        Text(match.name)
-                                            .font(.body)
-                                            .fontWeight(unread.contains(match.id) ? .bold : .regular)
-                                        Spacer()
-                                        if let p = previews[match.id] {
-                                            Text(relativeTime(from: p.date))
-                                                .font(.caption)
-                                                .foregroundColor(.secondary)
+                    ScrollView {
+                        LazyVStack(spacing: 8) {
+                            ForEach(filteredMatches) { match in
+                                NavigationLink {
+                                    MatchDetailView(match: match)
+                                        .onAppear {
+                                            markChatRead(with: match.id)
                                         }
-                                    }
-                                    if let p = previews[match.id] {
-                                        Text(String(p.text.prefix(15)) + (p.text.count > 15 ? "…" : ""))
-                                            .font(.subheadline)
-                                            .foregroundColor(unread.contains(match.id) ? .primary : .gray)
-                                    } else {
-                                        Text("No messages yet")
-                                            .font(.subheadline)
-                                            .foregroundColor(.gray)
-                                    }
-                                }
-                                if unread.contains(match.id) {
-                                    Circle()
-                                        .frame(width: 10, height: 10)
-                                        .foregroundColor(.blue)
-                                }
-                            }
-                            .padding(.vertical, 6)
-                            .onAppear {
-                                if previews[match.id] == nil {
-                                    loadLastMessage(for: match.id)
+                                } label: {
+                                    MatchRow(match: match)
+                                        .onAppear {
+                                            if previews[match.id] == nil {
+                                                loadLastMessage(for: match.id)
+                                            }
+                                        }
                                 }
                             }
                         }
+                        .padding(.horizontal)
+                        .padding(.top, 8)
                     }
-                    .listStyle(.insetGrouped)
                 }
-                Button {
-                    simulateMatch()
-                } label: {
-                    Label("Simulate Match", systemImage: "person.crop.circle.badge.plus")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.green)
-                .padding(.horizontal)
-                .padding(.bottom, 8)
             }
-            .navigationTitle("Matches")
+            .navigationTitle("Matches") // Retained for navigation bar
+            .navigationBarTitleDisplayMode(.large)
+            .background(Color(.systemGroupedBackground).ignoresSafeArea())
             .onAppear {
                 fetchMatches()
             }
         }
+    }
+
+    // MARK: Match Row View
+    private func MatchRow(match: Match) -> some View {
+        HStack(spacing: 12) {
+            if let ui = match.image {
+                Image(uiImage: ui)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 60, height: 60)
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(Color.gray.opacity(0.2), lineWidth: 1))
+            } else {
+                Circle()
+                    .fill(Color.gray.opacity(0.2))
+                    .frame(width: 60, height: 60)
+                    .overlay(
+                        Image(systemName: "person.fill")
+                            .foregroundColor(.gray)
+                    )
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(match.name)
+                        .font(.headline)
+                        .fontWeight(unread.contains(match.id) ? .bold : .medium)
+                        .foregroundColor(.primary)
+                    Spacer()
+                    if let preview = previews[match.id] {
+                        Text(relativeTime(from: preview.date))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                if let preview = previews[match.id] {
+                    Text(String(preview.text.prefix(50)) + (preview.text.count > 50 ? "…" : ""))
+                        .font(.subheadline)
+                        .foregroundColor(unread.contains(match.id) ? .primary : .secondary)
+                        .lineLimit(1)
+                } else {
+                    Text("No messages yet")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .italic()
+                }
+            }
+
+            if unread.contains(match.id) {
+                Circle()
+                    .frame(width: 12, height: 12)
+                    .foregroundColor(.blue)
+                    .shadow(radius: 2)
+            }
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .shadow(color: .gray.opacity(0.1), radius: 4, x: 0, y: 2)
+        .padding(.horizontal, 4)
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
     }
 
     // MARK: fetch mutual matches
@@ -160,9 +255,10 @@ struct MatchesView: View {
                 let txt = latest["text"] as? String ?? ""
                 let date = latest.creationDate ?? Date()
                 let fromUser = latest["fromUser"] as? String ?? ""
+                let isMe = fromUser == myID
 
                 DispatchQueue.main.async {
-                    previews[otherID] = .init(text: txt, date: date, fromUser: fromUser)
+                    previews[otherID] = .init(text: txt, date: date, fromUser: fromUser, isMe: isMe)
                     let lastSeen = lastRead(for: chatID)
                     if date > lastSeen && fromUser != myID {
                         unread.insert(otherID)
@@ -184,48 +280,6 @@ struct MatchesView: View {
         unread.remove(otherID)
     }
 
-    // MARK: simulate a match
-    func simulateMatch() {
-        guard let myID = UserDefaults.standard.string(forKey: "appleUserIdentifier") else { return }
-        let profileID = CKRecord.ID(recordName: "fakeUser123_profile")
-        let rec = CKRecord(recordType: "UserProfile", recordID: profileID)
-        rec["name"] = "Alex (Test User)" as NSString
-        rec["email"] = "alex@test.com" as NSString
-        rec["age"] = 28 as NSNumber
-        rec["gender"] = "Non-Binary" as NSString
-
-        let likeA = CKRecord(recordType: "Like")
-        likeA["fromUser"] = "fakeUser123" as NSString
-        likeA["toUser"] = myID as NSString
-
-        let likeB = CKRecord(recordType: "Like")
-        likeB["fromUser"] = myID as NSString
-        likeB["toUser"] = "fakeUser123" as NSString
-
-        let db = CKContainer.default().publicCloudDatabase
-        db.save(rec) { _, _ in
-            db.save(likeA) { _, _ in
-                db.save(likeB) { _, _ in
-                    fetchMatches()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-                        simulateIncomingMessage(from: "fakeUser123", to: myID)
-                    }
-                }
-            }
-        }
-    }
-
-    func simulateIncomingMessage(from sender: String, to recipient: String) {
-        let rec = CKRecord(recordType: "Message")
-        rec["text"] = "Hey! I saw you nearby and wanted to say hi 👋" as NSString
-        rec["fromUser"] = sender as NSString
-        rec["toUser"] = recipient as NSString
-        rec["isBot"] = true as NSNumber
-        rec["chatID"] = [sender, recipient].sorted().joined(separator: "_") as NSString
-
-        CKContainer.default().publicCloudDatabase.save(rec) { _, _ in }
-    }
-
     // MARK: utilities
     func relativeTime(from date: Date) -> String {
         let c = Calendar.current.dateComponents([.day, .hour, .minute], from: date, to: Date())
@@ -242,8 +296,7 @@ struct MatchesView: View {
     }
 }
 
-
-// MARK: 5: MatchDetailView with header segment control
+// MARK: MatchDetailView with header segment control
 struct MatchDetailView: View {
     let match: Match
     @State private var selectedTab: Tab = .chat
@@ -281,7 +334,7 @@ struct MatchDetailView: View {
     }
 }
 
-// MARK: 6: Chat View
+// MARK: Chat View
 struct ChatView: View {
     @State private var messages: [Message] = []
     @State private var newMessage = ""
@@ -398,8 +451,7 @@ struct ChatView: View {
     }
 }
 
-// MARK: 7: ProfileDetailView
-// MARK: Full profile detail view using SectionGrid
+// MARK: ProfileDetailView
 struct ImageWrapper: Identifiable {
     let id = UUID()
     let ui: UIImage
@@ -459,8 +511,7 @@ struct ProfileDetailView: View {
                 Image(uiImage: wrapper.ui)
                     .resizable()
                     .scaledToFit()
-                    .frame(maxWidth: .infinity,
-                           maxHeight: .infinity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Color.black)
                     .ignoresSafeArea()
 
@@ -480,12 +531,10 @@ struct ProfileDetailView: View {
         CKContainer.default().publicCloudDatabase.fetch(withRecordID: recordID) { rec, _ in
             guard let rec = rec else { return }
             DispatchQueue.main.async {
-                // parse fields
                 fullProfile = rec.allKeys().reduce(into: [:]) { dict, key in
                     if let s = rec[key] as? String { dict[key] = s }
                     else if let n = rec[key] as? NSNumber { dict[key] = n.stringValue }
                 }
-                // load photos 1–6
                 photos = (1...6).compactMap { i in
                     guard let asset = rec["photo\(i)"] as? CKAsset,
                           let url = asset.fileURL,
@@ -528,7 +577,7 @@ struct ProfileDetailView: View {
     }
 }
 
-// Supporting models
+// MARK: Supporting Models
 struct Message: Identifiable {
     let id: String
     let text: String
@@ -538,9 +587,9 @@ struct Message: Identifiable {
 
 
 
-// Preview
+// MARK: Preview
 #Preview {
     NavigationStack {
-        MatchDetailView(match: Match(id: "123", name: "Alex", image: nil))
+        MatchesView()
     }
 }

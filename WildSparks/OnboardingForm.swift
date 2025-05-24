@@ -137,7 +137,7 @@ struct CustomTextFieldStyle: ViewModifier {
 // MARK: - OnboardingForm View
 
 struct OnboardingForm: View {
-    @ObservedObject var profile = UserProfile()
+    @StateObject var profile = UserProfile() // Changed from @ObservedObject
     @State private var currentStep = 1
     @State private var navigateToHome = false
     @State private var images: [Data] = []
@@ -990,26 +990,36 @@ struct OnboardingForm: View {
     }
 
     private func saveProfile() {
+        // Debug: Confirm function is called
+        print("saveProfile() started")
+        
         guard let userIdentifier = UserDefaults.standard.string(forKey: "appleUserIdentifier") else {
-            print("Error: No userIdentifier found")
+            print("Error: No appleUserIdentifier found in UserDefaults")
             return
         }
-
+        
         let userRecordID = CKRecord.ID(recordName: userIdentifier)
-
+        
+        // Fetch user record (optional step, proceed even if it fails)
         CKContainer.default().publicCloudDatabase.fetch(withRecordID: userRecordID) { userRecord, error in
-            if let error = error as? CKError, error.code == .unknownItem {
-                print("User record not found — creating new user profile without reference")
+            if let error = error as? CKError {
+                print("CloudKit fetch error: \(error.localizedDescription)")
+                if error.code == .unknownItem {
+                    print("User record not found — creating profile without reference")
+                }
+            } else {
+                print("User record fetched successfully")
             }
-
+            
             let profileRecordID = CKRecord.ID(recordName: "\(userIdentifier)_profile")
             let profileRecord = CKRecord(recordType: "UserProfile", recordID: profileRecordID)
-
+            
             if let userRecord = userRecord {
                 let reference = CKRecord.Reference(recordID: userRecord.recordID, action: .deleteSelf)
                 profileRecord["userReference"] = reference
             }
-
+            
+            // Populate profile fields
             profileRecord["name"] = !profile.name.isEmpty ? profile.name as NSString : nil
             profileRecord["age"] = profile.age > 0 ? profile.age as NSNumber : nil
             profileRecord["email"] = !profile.email.isEmpty ? profile.email as NSString : nil
@@ -1050,30 +1060,33 @@ struct OnboardingForm: View {
                 profileRecord["fieldVisibilities"] = fieldVisStr as NSString
             }
 
-            for (index, imageData) in images.enumerated() {
-                let tempDirectory = NSTemporaryDirectory()
-                let fileName = UUID().uuidString + ".jpg"
-                let fileURL = URL(fileURLWithPath: tempDirectory).appendingPathComponent(fileName)
-                do {
-                    try imageData.write(to: fileURL)
-                    let asset = CKAsset(fileURL: fileURL)
-                    profileRecord["photo\(index + 1)"] = asset
-                } catch {
-                    print("Error writing image to temporary file: \(error.localizedDescription)")
-                }
-            }
-
-            CKContainer.default().publicCloudDatabase.save(profileRecord) { _, error in
-                if let error = error {
-                    print("Error saving profile: \(error.localizedDescription)")
-                } else {
-                    print("Profile saved to CloudKit under 'UserProfile'")
-                    DispatchQueue.main.async {
-                        navigateToHome = true
-                    }
-                }
-            }
-        }
+            // Handle images (unchanged from your code)
+                   for (index, imageData) in images.enumerated() {
+                       let tempDirectory = NSTemporaryDirectory()
+                       let fileName = UUID().uuidString + ".jpg"
+                       let fileURL = URL(fileURLWithPath: tempDirectory).appendingPathComponent(fileName)
+                       do {
+                           try imageData.write(to: fileURL)
+                           let asset = CKAsset(fileURL: fileURL)
+                           profileRecord["photo\(index + 1)"] = asset
+                       } catch {
+                           print("Error writing image to temporary file: \(error.localizedDescription)")
+                       }
+                   }
+                   
+                   // Save to CloudKit
+                   CKContainer.default().publicCloudDatabase.save(profileRecord) { record, error in
+                       DispatchQueue.main.async {
+                           if let error = error {
+                               print("Error saving profile to CloudKit: \(error.localizedDescription)")
+                           } else {
+                               print("Profile saved successfully to CloudKit")
+                               self.navigateToHome = true // Trigger navigation
+                           }
+                       }
+                   }
+               }
+           
     }
 }
 
