@@ -11,113 +11,140 @@ struct ProfileView: View {
     @State private var showingImagePicker = false
     @State private var isEditing = false
     @State private var currentUserID: String = ""
+    @State private var isLoading = true
 
     private let gridColumns = [
         GridItem(.flexible(), spacing: 16),
         GridItem(.flexible(), spacing: 16)
     ]
 
+    private let photoGridColumns = [
+        GridItem(.flexible()),
+        GridItem(.flexible()),
+        GridItem(.flexible())
+    ]
+
     var body: some View {
         NavigationStack {
             ZStack {
                 Color(.systemGray6).ignoresSafeArea()
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 24) {
-                        photosCarousel
-
-                        // About Me
-                        Group {
-                            if isEditing {
-                                basicInfoSection()
-                                    .padding()
-                                    .background(Color.white)
-                                    .cornerRadius(12)
-                            } else {
-                                SectionGrid(title: "About Me", items: aboutItems)
+                GeometryReader { geometry in
+                    ScrollView(showsIndicators: false) {
+                        if isLoading {
+                            ProgressView()
+                                .padding(.top, 50)
+                        } else {
+                            VStack(spacing: 24) {
+                                photosCarousel(width: geometry.size.width)
+                                Group {
+                                    if isEditing {
+                                        basicInfoSection()
+                                            .padding()
+                                            .background(Color.white)
+                                            .cornerRadius(12)
+                                    } else {
+                                        SectionGrid(
+                                            title: "About Me",
+                                            items: aboutItems,
+                                            availableWidth: geometry.size.width - 24
+                                        )
+                                    }
+                                }
+                                Group {
+                                    if isEditing {
+                                        lifestyleSection()
+                                            .padding()
+                                            .background(Color.white)
+                                            .cornerRadius(12)
+                                    } else {
+                                        SectionGrid(
+                                            title: "Lifestyle",
+                                            items: lifestyleItems,
+                                            availableWidth: geometry.size.width - 24
+                                        )
+                                    }
+                                }
+                                Group {
+                                    if isEditing {
+                                        backgroundSection()
+                                            .padding()
+                                            .background(Color.white)
+                                            .cornerRadius(12)
+                                    } else {
+                                        SectionGrid(
+                                            title: "Background",
+                                            items: backgroundItems,
+                                            availableWidth: geometry.size.width - 24
+                                        )
+                                    }
+                                }
+                                Group {
+                                    if isEditing {
+                                        educationWorkSection()
+                                            .padding()
+                                            .background(Color.white)
+                                            .cornerRadius(12)
+                                    } else {
+                                        SectionGrid(
+                                            title: "Work & Education",
+                                            items: workItems,
+                                            availableWidth: geometry.size.width - 24
+                                        )
+                                    }
+                                }
+                                Group {
+                                    if isEditing {
+                                        datingPreferencesSection()
+                                            .padding()
+                                            .background(Color.white)
+                                            .cornerRadius(12)
+                                    } else {
+                                        SectionGrid(
+                                            title: "Dating Preferences",
+                                            items: datingItems,
+                                            availableWidth: geometry.size.width - 24
+                                        )
+                                    }
+                                }
+                                Group {
+                                    if isEditing {
+                                        extrasSection()
+                                            .padding()
+                                            .background(Color.white)
+                                            .cornerRadius(12)
+                                    } else {
+                                        SectionGrid(
+                                            title: "More About Me",
+                                            items: extrasItems,
+                                            availableWidth: geometry.size.width - 24
+                                        )
+                                    }
+                                }
+                                SectionGrid(
+                                    title: "Ideal Bracket",
+                                    items: bracketItems,
+                                    availableWidth: geometry.size.width - 24
+                                )
+                                Button {
+                                    if isEditing { saveProfile() }
+                                    isEditing.toggle()
+                                } label: {
+                                    Text(isEditing ? "Save Profile" : "Edit Profile")
+                                        .font(.headline)
+                                        .frame(maxWidth: .infinity)
+                                        .padding()
+                                        .background(isEditing ? Color.black : Color.blue)
+                                        .foregroundColor(.white)
+                                        .cornerRadius(12)
+                                }
+                                .padding(.horizontal)
+                                .padding(.bottom, 40)
                             }
+                            .padding(.leading, 8)
+                            .padding(.trailing, 16)
+                            .padding(.bottom, 40)
                         }
-
-                        // Lifestyle
-                        Group {
-                            if isEditing {
-                                lifestyleSection()
-                                    .padding()
-                                    .background(Color.white)
-                                    .cornerRadius(12)
-                            } else {
-                                SectionGrid(title: "Lifestyle", items: lifestyleItems)
-                            }
-                        }
-
-                        // Background
-                        Group {
-                            if isEditing {
-                                backgroundSection()
-                                    .padding()
-                                    .background(Color.white)
-                                    .cornerRadius(12)
-                            } else {
-                                SectionGrid(title: "Background", items: backgroundItems)
-                            }
-                        }
-
-                        // Work & Education
-                        Group {
-                            if isEditing {
-                                educationWorkSection()
-                                    .padding()
-                                    .background(Color.white)
-                                    .cornerRadius(12)
-                            } else {
-                                SectionGrid(title: "Work & Education", items: workItems)
-                            }
-                        }
-
-                        // Dating Preferences
-                        Group {
-                            if isEditing {
-                                datingPreferencesSection()
-                                    .padding()
-                                    .background(Color.white)
-                                    .cornerRadius(12)
-                            } else {
-                                SectionGrid(title: "Dating Preferences", items: datingItems)
-                            }
-                        }
-
-                        // More About Me
-                        Group {
-                            if isEditing {
-                                extrasSection()
-                                    .padding()
-                                    .background(Color.white)
-                                    .cornerRadius(12)
-                            } else {
-                                SectionGrid(title: "More About Me", items: extrasItems)
-                            }
-                        }
-
-                        // Ideal Bracket
-                        SectionGrid(title: "Ideal Bracket", items: bracketItems)
-
-                        // Edit/Save
-                        Button {
-                            if isEditing { saveProfile() }
-                            isEditing.toggle()
-                        } label: {
-                            Text(isEditing ? "Save Profile" : "Edit Profile")
-                                .font(.headline)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(isEditing ? Color.black : Color.blue)
-                                .foregroundColor(.white)
-                                .cornerRadius(12)
-                        }
-                        .padding(.horizontal)
-                        .padding(.bottom, 40)
                     }
-                    .padding(.horizontal)
-                    .padding(.bottom, 40)
                 }
             }
             .navigationBarTitle("Profile", displayMode: .inline)
@@ -142,38 +169,74 @@ struct ProfileView: View {
         }
     }
 
-    // MARK: — Photos
-    private var photosCarousel: some View {
-        TabView {
-            ForEach(images, id: \.self) { data in
-                if let ui = UIImage(data: data) {
-                    Image(uiImage: ui)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(height: 300)
-                        .clipped()
-                }
-            }
-            if isEditing && images.count < 6 {
-                Button {
-                    showingImagePicker = true
-                } label: {
-                    ZStack {
-                        Rectangle()
-                            .fill(Color(.systemGray5))
-                            .frame(height: 300)
-                        VStack {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.largeTitle)
-                            Text("Add Photo")
-                                .font(.caption)
+    private func photosCarousel(width: CGFloat) -> some View {
+        Group {
+            if isEditing {
+                LazyVGrid(columns: photoGridColumns, spacing: 10) {
+                    ForEach(0..<6, id: \.self) { index in
+                        if index < images.count {
+                            VStack {
+                                if let ui = UIImage(data: images[index]) {
+                                    Image(uiImage: ui)
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: 100, height: 100)
+                                        .cornerRadius(10)
+                                }
+                                HStack(spacing: 10) {
+                                    if index > 0 {
+                                        Button(action: { movePhoto(from: index, to: index - 1) }) {
+                                            Image(systemName: "chevron.left")
+                                                .foregroundColor(.blue)
+                                        }
+                                        .accessibilityLabel("Move photo left")
+                                    }
+                                    Button(action: { images.remove(at: index) }) {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundColor(.red)
+                                    }
+                                    .accessibilityLabel("Delete photo")
+                                    if index < images.count - 1 {
+                                        Button(action: { movePhoto(from: index, to: index + 1) }) {
+                                            Image(systemName: "chevron.right")
+                                                .foregroundColor(.blue)
+                                        }
+                                        .accessibilityLabel("Move photo right")
+                                    }
+                                }
+                            }
+                        } else {
+                            Button(action: { showingImagePicker = true }) {
+                                ZStack {
+                                    Rectangle()
+                                        .fill(Color(.systemGray5))
+                                        .frame(width: 100, height: 100)
+                                        .cornerRadius(10)
+                                    Text("Add Photo")
+                                        .foregroundColor(.blue)
+                                        .font(.caption)
+                                }
+                            }
+                            .accessibilityLabel("Add photo")
                         }
                     }
                 }
+                .padding()
+            } else {
+                TabView {
+                    ForEach(images.indices, id: \.self) { index in
+                        if let ui = UIImage(data: images[index]) {
+                            Image(uiImage: ui)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(width: width)
+                        }
+                    }
+                }
+                .frame(width: width, height: width)
+                .tabViewStyle(PageTabViewStyle())
             }
         }
-        .frame(height: 300)
-        .tabViewStyle(PageTabViewStyle())
         .photosPicker(isPresented: $showingImagePicker,
                       selection: $selectedItems,
                       maxSelectionCount: 6 - images.count,
@@ -181,64 +244,216 @@ struct ProfileView: View {
         .onChange(of: selectedItems, perform: handlePhotoSelection)
     }
 
-    // MARK: — Editable Sections
-
     private func basicInfoSection() -> some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Name")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                TextField("", text: $profile.name)
+                TextField("Enter your name", text: $profile.name)
                     .textFieldStyle(.roundedBorder)
+                    .disabled(!isEditing)
+                Text("Visible to Everyone (Required)")
+                    .font(.caption)
+                    .foregroundColor(.gray)
             }
+            Divider()
             VStack(alignment: .leading, spacing: 4) {
                 Text("Age")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                 Picker("", selection: $profile.age) {
-                    ForEach(18...100, id: \.self) { Text("\($0)") }
+                    ForEach(18...100, id: \.self) { age in
+                        Text("\(age)").tag(age)
+                    }
                 }
-                .pickerStyle(.menu)
+                .pickerStyle(MenuPickerStyle())
+                .disabled(!isEditing)
+                Text("Visible to Everyone (Required)")
+                    .font(.caption)
+                    .foregroundColor(.gray)
             }
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Height")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                heightPicker()
-            }
+            Divider()
             VStack(alignment: .leading, spacing: 4) {
                 Text("Email")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                TextField("", text: $profile.email)
+                TextField("Enter your email", text: $profile.email)
                     .textFieldStyle(.roundedBorder)
+                    .disabled(!isEditing)
+                VisibilityPicker(fieldName: "email", selection: Binding(
+                    get: { profile.fieldVisibilities["email"] ?? .everyone },
+                    set: { profile.fieldVisibilities["email"] = $0 }
+                ))
             }
+            Divider()
             VStack(alignment: .leading, spacing: 4) {
                 Text("Phone")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                TextField("", text: $profile.phoneNumber)
+                TextField("Enter your phone number", text: $profile.phoneNumber)
                     .textFieldStyle(.roundedBorder)
+                    .disabled(!isEditing)
+                VisibilityPicker(fieldName: "phoneNumber", selection: Binding(
+                    get: { profile.fieldVisibilities["phoneNumber"] ?? .everyone },
+                    set: { profile.fieldVisibilities["phoneNumber"] = $0 }
+                ))
+            }
+            Divider()
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Gender")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                Picker("", selection: $profile.gender) {
+                    Text("Male").tag("Male")
+                    Text("Female").tag("Female")
+                    Text("Non-Binary").tag("Non-Binary")
+                    Text("Other").tag("Other")
+                    Text("Prefer not to say").tag("Prefer not to say")
+                }
+                .pickerStyle(SegmentedPickerStyle())
+                .disabled(!isEditing)
+                VisibilityPicker(fieldName: "gender", selection: Binding(
+                    get: { profile.fieldVisibilities["gender"] ?? .everyone },
+                    set: { profile.fieldVisibilities["gender"] = $0 }
+                ))
+            }
+            Divider()
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Sexuality")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                Picker("", selection: $profile.sexuality) {
+                    Text("Heterosexual").tag("Heterosexual")
+                    Text("Homosexual").tag("Homosexual")
+                    Text("Bisexual").tag("Bisexual")
+                    Text("Pansexual").tag("Pansexual")
+                    Text("Asexual").tag("Asexual")
+                    Text("Other").tag("Other")
+                }
+                .pickerStyle(MenuPickerStyle())
+                .disabled(!isEditing)
+                VisibilityPicker(fieldName: "sexuality", selection: Binding(
+                    get: { profile.fieldVisibilities["sexuality"] ?? .everyone },
+                    set: { profile.fieldVisibilities["sexuality"] = $0 }
+                ))
+            }
+            Divider()
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Height")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Feet")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Picker("", selection: $feet) {
+                            ForEach(3..<8, id: \.self) { ft in
+                                Text("\(ft)").tag(ft)
+                            }
+                        }
+                        .pickerStyle(MenuPickerStyle())
+                        .disabled(!isEditing)
+                    }
+                    .frame(maxWidth: .infinity)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Inches")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Picker("", selection: $inches) {
+                            ForEach(0..<12, id: \.self) { inch in
+                                Text("\(inch)").tag(inch)
+                            }
+                        }
+                        .pickerStyle(MenuPickerStyle())
+                        .disabled(!isEditing)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .onChange(of: feet) { _ in profile.height = "\(feet) ft \(inches) in" }
+                .onChange(of: inches) { _ in profile.height = "\(feet) ft \(inches) in" }
+                VisibilityPicker(fieldName: "height", selection: Binding(
+                    get: { profile.fieldVisibilities["height"] ?? .everyone },
+                    set: { profile.fieldVisibilities["height"] = $0 }
+                ))
             }
         }
     }
 
     private func lifestyleSection() -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            Toggle("Drinks", isOn: $profile.drinks)
-            Toggle("Smokes", isOn: $profile.smokes)
-            Toggle("Smokes Weed", isOn: $profile.smokesWeed)
-            Toggle("Uses Drugs", isOn: $profile.usesDrugs)
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle("Do you drink?", isOn: $profile.drinks)
+                    .disabled(!isEditing)
+                VisibilityPicker(fieldName: "drinks", selection: Binding(
+                    get: { profile.fieldVisibilities["drinks"] ?? .everyone },
+                    set: { profile.fieldVisibilities["drinks"] = $0 }
+                ))
+            }
+            Divider()
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle("Do you smoke?", isOn: $profile.smokes)
+                    .disabled(!isEditing)
+                VisibilityPicker(fieldName: "smokes", selection: Binding(
+                    get: { profile.fieldVisibilities["smokes"] ?? .everyone },
+                    set: { profile.fieldVisibilities["smokes"] = $0 }
+                ))
+            }
+            Divider()
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle("Do you smoke weed?", isOn: $profile.smokesWeed)
+                    .disabled(!isEditing)
+                VisibilityPicker(fieldName: "smokesWeed", selection: Binding(
+                    get: { profile.fieldVisibilities["smokesWeed"] ?? .everyone },
+                    set: { profile.fieldVisibilities["smokesWeed"] = $0 }
+                ))
+            }
+            Divider()
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle("Do you use other drugs?", isOn: $profile.usesDrugs)
+                    .disabled(!isEditing)
+                VisibilityPicker(fieldName: "usesDrugs", selection: Binding(
+                    get: { profile.fieldVisibilities["usesDrugs"] ?? .everyone },
+                    set: { profile.fieldVisibilities["usesDrugs"] = $0 }
+                ))
+            }
+            Divider()
             VStack(alignment: .leading, spacing: 4) {
                 Text("Pets")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                TextField("", text: $profile.pets)
-                    .textFieldStyle(.roundedBorder)
+                Picker("", selection: $profile.pets) {
+                    Text("Dog(s)").tag("Dog(s)")
+                    Text("Cat(s)").tag("Cat(s)")
+                    Text("Dog(s) & Cat(s)").tag("Dog(s) & Cat(s)")
+                    Text("None").tag("None")
+                }
+                .pickerStyle(MenuPickerStyle())
+                .disabled(!isEditing)
+                VisibilityPicker(fieldName: "pets", selection: Binding(
+                    get: { profile.fieldVisibilities["pets"] ?? .everyone },
+                    set: { profile.fieldVisibilities["pets"] = $0 }
+                ))
             }
-            Toggle("Has Children", isOn: $profile.hasChildren)
-            Toggle("Wants Children", isOn: $profile.wantsChildren)
+            Divider()
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle("Do you currently have children?", isOn: $profile.hasChildren)
+                    .disabled(!isEditing)
+                VisibilityPicker(fieldName: "hasChildren", selection: Binding(
+                    get: { profile.fieldVisibilities["hasChildren"] ?? .everyone },
+                    set: { profile.fieldVisibilities["hasChildren"] = $0 }
+                ))
+            }
+            Divider()
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle("Do you want children?", isOn: $profile.wantsChildren)
+                    .disabled(!isEditing)
+                VisibilityPicker(fieldName: "wantsChildren", selection: Binding(
+                    get: { profile.fieldVisibilities["wantsChildren"] ?? .everyone },
+                    set: { profile.fieldVisibilities["wantsChildren"] = $0 }
+                ))
+            }
         }
     }
 
@@ -248,43 +463,120 @@ struct ProfileView: View {
                 Text("Religion")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                TextField("", text: $profile.religion)
-                    .textFieldStyle(.roundedBorder)
+                Picker("", selection: $profile.religion) {
+                    Text("Christian").tag("Christian")
+                    Text("Muslim").tag("Muslim")
+                    Text("Jewish").tag("Jewish")
+                    Text("Hindu").tag("Hindu")
+                    Text("Buddhist").tag("Buddhist")
+                    Text("Atheist").tag("Atheist")
+                    Text("Other").tag("Other")
+                }
+                .pickerStyle(MenuPickerStyle())
+                .disabled(!isEditing)
+                VisibilityPicker(fieldName: "religion", selection: Binding(
+                    get: { profile.fieldVisibilities["religion"] ?? .everyone },
+                    set: { profile.fieldVisibilities["religion"] = $0 }
+                ))
             }
+            Divider()
             VStack(alignment: .leading, spacing: 4) {
                 Text("Ethnicity")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                TextField("", text: $profile.ethnicity)
-                    .textFieldStyle(.roundedBorder)
+                Picker("", selection: $profile.ethnicity) {
+                    Text("White").tag("White")
+                    Text("Latino").tag("Latino")
+                    Text("Asian").tag("Asian")
+                    Text("Black").tag("Black")
+                    Text("Mixed").tag("Mixed")
+                    Text("Other").tag("Other")
+                }
+                .pickerStyle(MenuPickerStyle())
+                .disabled(!isEditing)
+                VisibilityPicker(fieldName: "ethnicity", selection: Binding(
+                    get: { profile.fieldVisibilities["ethnicity"] ?? .everyone },
+                    set: { profile.fieldVisibilities["ethnicity"] = $0 }
+                ))
             }
+            Divider()
             VStack(alignment: .leading, spacing: 4) {
                 Text("Lives In")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                TextField("", text: $profile.hometown)
+                TextField("Enter your current city", text: $profile.hometown)
                     .textFieldStyle(.roundedBorder)
+                    .disabled(!isEditing)
+                VisibilityPicker(fieldName: "hometown", selection: Binding(
+                    get: { profile.fieldVisibilities["hometown"] ?? .everyone },
+                    set: { profile.fieldVisibilities["hometown"] = $0 }
+                ))
             }
+            Divider()
             VStack(alignment: .leading, spacing: 4) {
                 Text("Political View")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                TextField("", text: $profile.politicalView)
-                    .textFieldStyle(.roundedBorder)
+                Picker("", selection: $profile.politicalView) {
+                    Text("Liberal").tag("Liberal")
+                    Text("Conservative").tag("Conservative")
+                    Text("Moderate").tag("Moderate")
+                    Text("Libertarian").tag("Libertarian")
+                    Text("Progressive").tag("Progressive")
+                    Text("Other").tag("Other")
+                    Text("Prefer not to say").tag("Prefer not to say")
+                }
+                .pickerStyle(MenuPickerStyle())
+                .disabled(!isEditing)
+                VisibilityPicker(fieldName: "politicalView", selection: Binding(
+                    get: { profile.fieldVisibilities["politicalView"] ?? .everyone },
+                    set: { profile.fieldVisibilities["politicalView"] = $0 }
+                ))
             }
+            Divider()
             VStack(alignment: .leading, spacing: 4) {
                 Text("Zodiac Sign")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                TextField("", text: $profile.zodiacSign)
-                    .textFieldStyle(.roundedBorder)
+                Picker("", selection: $profile.zodiacSign) {
+                    Text("Aries").tag("Aries")
+                    Text("Taurus").tag("Taurus")
+                    Text("Gemini").tag("Gemini")
+                    Text("Cancer").tag("Cancer")
+                    Text("Leo").tag("Leo")
+                    Text("Virgo").tag("Virgo")
+                    Text("Libra").tag("Libra")
+                    Text("Scorpio").tag("Scorpio")
+                    Text("Sagittarius").tag("Sagittarius")
+                    Text("Capricorn").tag("Capricorn")
+                    Text("Aquarius").tag("Aquarius")
+                    Text("Pisces").tag("Pisces")
+                }
+                .pickerStyle(MenuPickerStyle())
+                .disabled(!isEditing)
+                VisibilityPicker(fieldName: "zodiacSign", selection: Binding(
+                    get: { profile.fieldVisibilities["zodiacSign"] ?? .everyone },
+                    set: { profile.fieldVisibilities["zodiacSign"] = $0 }
+                ))
             }
+            Divider()
             VStack(alignment: .leading, spacing: 4) {
                 Text("Languages")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                TextField("", text: $profile.languagesSpoken)
-                    .textFieldStyle(.roundedBorder)
+                Picker("", selection: $profile.languagesSpoken) {
+                    Text("English").tag("English")
+                    Text("Spanish").tag("Spanish")
+                    Text("French").tag("French")
+                    Text("Chinese").tag("Chinese")
+                    Text("Other").tag("Other")
+                }
+                .pickerStyle(MenuPickerStyle())
+                .disabled(!isEditing)
+                VisibilityPicker(fieldName: "languagesSpoken", selection: Binding(
+                    get: { profile.fieldVisibilities["languagesSpoken"] ?? .everyone },
+                    set: { profile.fieldVisibilities["languagesSpoken"] = $0 }
+                ))
             }
         }
     }
@@ -295,29 +587,59 @@ struct ProfileView: View {
                 Text("Education Level")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                TextField("", text: $profile.educationLevel)
-                    .textFieldStyle(.roundedBorder)
+                Picker("", selection: $profile.educationLevel) {
+                    Text("High School").tag("High School")
+                    Text("Associate's Degree").tag("Associate's Degree")
+                    Text("Bachelor's Degree").tag("Bachelor's Degree")
+                    Text("Master's Degree").tag("Master's Degree")
+                    Text("Doctorate").tag("Doctorate")
+                    Text("Other").tag("Other")
+                }
+                .pickerStyle(MenuPickerStyle())
+                .disabled(!isEditing)
+                VisibilityPicker(fieldName: "educationLevel", selection: Binding(
+                    get: { profile.fieldVisibilities["educationLevel"] ?? .everyone },
+                    set: { profile.fieldVisibilities["educationLevel"] = $0 }
+                ))
             }
+            Divider()
             VStack(alignment: .leading, spacing: 4) {
                 Text("College")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                TextField("", text: $profile.college)
+                TextField("Enter your college", text: $profile.college)
                     .textFieldStyle(.roundedBorder)
+                    .disabled(!isEditing)
+                VisibilityPicker(fieldName: "college", selection: Binding(
+                    get: { profile.fieldVisibilities["college"] ?? .everyone },
+                    set: { profile.fieldVisibilities["college"] = $0 }
+                ))
             }
+            Divider()
             VStack(alignment: .leading, spacing: 4) {
                 Text("Job Title")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                TextField("", text: $profile.jobTitle)
+                TextField("Enter your job title", text: $profile.jobTitle)
                     .textFieldStyle(.roundedBorder)
+                    .disabled(!isEditing)
+                VisibilityPicker(fieldName: "jobTitle", selection: Binding(
+                    get: { profile.fieldVisibilities["jobTitle"] ?? .everyone },
+                    set: { profile.fieldVisibilities["jobTitle"] = $0 }
+                ))
             }
+            Divider()
             VStack(alignment: .leading, spacing: 4) {
                 Text("Company")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                TextField("", text: $profile.companyName)
+                TextField("Enter your company name", text: $profile.companyName)
                     .textFieldStyle(.roundedBorder)
+                    .disabled(!isEditing)
+                VisibilityPicker(fieldName: "companyName", selection: Binding(
+                    get: { profile.fieldVisibilities["companyName"] ?? .everyone },
+                    set: { profile.fieldVisibilities["company"] = $0 }
+                ))
             }
         }
     }
@@ -328,22 +650,52 @@ struct ProfileView: View {
                 Text("Interested In")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                TextField("", text: $profile.interestedIn)
-                    .textFieldStyle(.roundedBorder)
+                Picker("", selection: $profile.interestedIn) {
+                    Text("Men").tag("Men")
+                    Text("Women").tag("Women")
+                    Text("Non-Binary").tag("Non-Binary")
+                    Text("Anyone").tag("Anyone")
+                }
+                .pickerStyle(MenuPickerStyle())
+                .disabled(!isEditing)
+                VisibilityPicker(fieldName: "interestedIn", selection: Binding(
+                    get: { profile.fieldVisibilities["interestedIn"] ?? .everyone },
+                    set: { profile.fieldVisibilities["interestedIn"] = $0 }
+                ))
             }
+            Divider()
             VStack(alignment: .leading, spacing: 4) {
                 Text("Intentions")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                TextField("", text: $profile.datingIntentions)
-                    .textFieldStyle(.roundedBorder)
+                Picker("", selection: $profile.datingIntentions) {
+                    Text("Long-Term").tag("Long-Term")
+                    Text("Short-Term").tag("Short-Term")
+                    Text("Casual").tag("Casual")
+                }
+                .pickerStyle(MenuPickerStyle())
+                .disabled(!isEditing)
+                VisibilityPicker(fieldName: "datingIntentions", selection: Binding(
+                    get: { profile.fieldVisibilities["datingIntentions"] ?? .everyone },
+                    set: { profile.fieldVisibilities["datingIntentions"] = $0 }
+                ))
             }
+            Divider()
             VStack(alignment: .leading, spacing: 4) {
                 Text("Relationship")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                TextField("", text: $profile.relationshipType)
-                    .textFieldStyle(.roundedBorder)
+                Picker("", selection: $profile.relationshipType) {
+                    Text("Monogamy").tag("Monogamy")
+                    Text("Open").tag("Open")
+                    Text("Polyamory").tag("Polyamory")
+                }
+                .pickerStyle(MenuPickerStyle())
+                .disabled(!isEditing)
+                VisibilityPicker(fieldName: "relationshipType", selection: Binding(
+                    get: { profile.fieldVisibilities["relationshipType"] ?? .everyone },
+                    set: { profile.fieldVisibilities["relationshipType"] = $0 }
+                ))
             }
         }
     }
@@ -354,62 +706,126 @@ struct ProfileView: View {
                 Text("Socials")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                TextField("", text: $profile.socialMediaLinks)
+                TextField("Enter your social media links", text: $profile.socialMediaLinks)
                     .textFieldStyle(.roundedBorder)
+                    .disabled(!isEditing)
+                VisibilityPicker(fieldName: "socialMediaLinks", selection: Binding(
+                    get: { profile.fieldVisibilities["socialMediaLinks"] ?? .everyone },
+                    set: { profile.fieldVisibilities["socialMediaLinks"] = $0 }
+                ))
             }
+            Divider()
             VStack(alignment: .leading, spacing: 4) {
                 Text("Engagement")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                TextField("", text: $profile.politicalEngagementLevel)
-                    .textFieldStyle(.roundedBorder)
+                Picker("", selection: $profile.politicalEngagementLevel) {
+                    Text("Not Interested").tag("Not Interested")
+                    Text("Slightly Interested").tag("Slightly Interested")
+                    Text("Moderately Interested").tag("Moderately Interested")
+                    Text("Very Interested").tag("Very Interested")
+                    Text("Activist").tag("Activist")
+                }
+                .pickerStyle(MenuPickerStyle())
+                .disabled(!isEditing)
+                VisibilityPicker(fieldName: "politicalEngagementLevel", selection: Binding(
+                    get: { profile.fieldVisibilities["politicalEngagementLevel"] ?? .everyone },
+                    set: { profile.fieldVisibilities["politicalEngagementLevel"] = $0 }
+                ))
             }
+            Divider()
             VStack(alignment: .leading, spacing: 4) {
                 Text("Diet")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                TextField("", text: $profile.dietaryPreferences)
-                    .textFieldStyle(.roundedBorder)
+                Picker("", selection: $profile.dietaryPreferences) {
+                    Text("Omnivore").tag("Omnivore")
+                    Text("Vegetarian").tag("Vegetarian")
+                    Text("Vegan").tag("Vegan")
+                    Text("Pescatarian").tag("Pescatarian")
+                    Text("Other").tag("Other")
+                }
+                .pickerStyle(MenuPickerStyle())
+                .disabled(!isEditing)
+                VisibilityPicker(fieldName: "dietaryPreferences", selection: Binding(
+                    get: { profile.fieldVisibilities["dietaryPreferences"] ?? .everyone },
+                    set: { profile.fieldVisibilities["dietaryPreferences"] = $0 }
+                ))
             }
+            Divider()
             VStack(alignment: .leading, spacing: 4) {
                 Text("Exercise")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                TextField("", text: $profile.exerciseHabits)
-                    .textFieldStyle(.roundedBorder)
+                Picker("", selection: $profile.exerciseHabits) {
+                    Text("Sedentary").tag("Sedentary")
+                    Text("Lightly Active").tag("Lightly Active")
+                    Text("Moderate").tag("Moderate")
+                    Text("Active").tag("Active")
+                    Text("Very Active").tag("Very Active")
+                }
+                .pickerStyle(MenuPickerStyle())
+                .disabled(!isEditing)
+                VisibilityPicker(fieldName: "exerciseHabits", selection: Binding(
+                    get: { profile.fieldVisibilities["exerciseHabits"] ?? .everyone },
+                    set: { profile.fieldVisibilities["exerciseHabits"] = $0 }
+                ))
             }
+            Divider()
             VStack(alignment: .leading, spacing: 4) {
                 Text("Interests")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                TextField("", text: $profile.interests)
-                    .textFieldStyle(.roundedBorder)
+                Picker("", selection: $profile.interests) {
+                    Text("Sports").tag("Sports")
+                    Text("Music").tag("Music")
+                    Text("Travel").tag("Travel")
+                    Text("Movies").tag("Movies")
+                    Text("Reading").tag("Reading")
+                    Text("Art").tag("Art")
+                    Text("Cooking").tag("Cooking")
+                    Text("Other").tag("Other")
+                }
+                .pickerStyle(MenuPickerStyle())
+                .disabled(!isEditing)
+                VisibilityPicker(fieldName: "interests", selection: Binding(
+                    get: { profile.fieldVisibilities["interests"] ?? .everyone },
+                    set: { profile.fieldVisibilities["interests"] = $0 }
+                ))
             }
         }
     }
 
-    // MARK: — Read-Only Grids
-
-    private func SectionGrid(title: String, items: [(String, String)]) -> some View {
+    private func SectionGrid(title: String, items: [(String, String)], availableWidth: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
                 .font(.title3).bold()
                 .padding(.bottom, 4)
-            LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 12) {
+                .padding(.horizontal, 8)
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: 16),
+                    GridItem(.flexible(), spacing: 16)
+                ],
+                alignment: .leading,
+                spacing: 12
+            ) {
                 ForEach(items, id: \.0) { icon, text in
                     Label(text, systemImage: icon)
                         .font(.subheadline)
                         .foregroundColor(.primary)
+                        .frame(maxWidth: (availableWidth - 32) / 2, alignment: .leading)
+                        .lineLimit(2)
                 }
             }
-            .padding()
+            .padding(.horizontal, 8)
+            .padding(.vertical, 8)
+            .frame(maxWidth: availableWidth)
             .background(Color.white)
             .cornerRadius(12)
             .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
         }
     }
-
-    // MARK: — Data Arrays
 
     private var aboutItems: [(String, String)] {
         [
@@ -423,13 +839,13 @@ struct ProfileView: View {
 
     private var lifestyleItems: [(String, String)] {
         var a: [(String, String)] = []
-        if profile.drinks { a.append(("wineglass", "Drinks")) }
-        if profile.smokes { a.append(("smoke", "Smokes")) }
-        if profile.smokesWeed { a.append(("leaf", "Smokes Weed")) }
-        if profile.usesDrugs { a.append(("pills", "Uses Drugs")) }
+        a.append(("wineglass", profile.drinks ? "Drinks" : "No Drinks"))
+        a.append(("smoke", profile.smokes ? "Smokes" : "No Smoking"))
+        a.append(("leaf", profile.smokesWeed ? "Smokes Weed" : "No Weed"))
+        a.append(("pills", profile.usesDrugs ? "Uses Drugs" : "No Drugs"))
         if !profile.pets.isEmpty { a.append(("pawprint", "Pets: \(profile.pets)")) }
-        if profile.hasChildren { a.append(("person.2", "Has Children")) }
-        if profile.wantsChildren { a.append(("figure.wave", "Wants Children")) }
+        a.append(("person.2", profile.hasChildren ? "Has Children" : "No Children"))
+        a.append(("figure.wave", profile.wantsChildren ? "Wants Children" : "Does Not Want Children"))
         return a
     }
 
@@ -481,18 +897,18 @@ struct ProfileView: View {
         return a
     }
 
-    // MARK: — Helpers
-
     private func heightPicker() -> some View {
         HStack {
             Picker("", selection: $feet) {
                 ForEach(3..<8, id: \.self) { Text("\($0) ft") }
             }
-            .pickerStyle(.menu)
+            .pickerStyle(MenuPickerStyle())
+            .disabled(!isEditing)
             Picker("", selection: $inches) {
                 ForEach(0..<12, id: \.self) { Text("\($0) in") }
             }
-            .pickerStyle(.menu)
+            .pickerStyle(MenuPickerStyle())
+            .disabled(!isEditing)
         }
         .onChange(of: feet) { _ in profile.height = "\(feet) ft \(inches) in" }
         .onChange(of: inches) { _ in profile.height = "\(feet) ft \(inches) in" }
@@ -509,6 +925,13 @@ struct ProfileView: View {
         selectedItems = []
     }
 
+    private func movePhoto(from sourceIndex: Int, to targetIndex: Int) {
+        guard sourceIndex >= 0, sourceIndex < images.count,
+              targetIndex >= 0, targetIndex < images.count else { return }
+        let movedImage = images.remove(at: sourceIndex)
+        images.insert(movedImage, at: targetIndex)
+    }
+
     private func loadProfile() {
         guard let uid = UserDefaults.standard.string(forKey: "appleUserIdentifier") else { return }
         let rid = CKRecord.ID(recordName: "\(uid)_profile")
@@ -522,6 +945,15 @@ struct ProfileView: View {
                 profile.gender = r["gender"] as? String ?? ""
                 profile.sexuality = r["sexuality"] as? String ?? ""
                 profile.height = r["height"] as? String ?? ""
+                if let height = r["height"] as? String, !height.isEmpty {
+                    let components = height.split(separator: " ")
+                    if components.count == 4,
+                       let feetValue = Int(components[0]),
+                       let inchesValue = Int(components[2]) {
+                        feet = feetValue
+                        inches = inchesValue
+                    }
+                }
                 profile.drinks = r["drinks"] as? Bool ?? false
                 profile.smokes = r["smokes"] as? Bool ?? false
                 profile.smokesWeed = r["smokesWeed"] as? Bool ?? false
@@ -560,6 +992,7 @@ struct ProfileView: View {
                         images.append(d)
                     }
                 }
+                isLoading = false
             }
         }
     }
@@ -605,11 +1038,16 @@ struct ProfileView: View {
                let json = String(data: data, encoding: .utf8) {
                 record["fieldVisibilities"] = json as NSString
             }
-            for (i, d) in images.enumerated() {
-                let url = URL(fileURLWithPath: NSTemporaryDirectory())
-                    .appendingPathComponent(UUID().uuidString + ".jpg")
-                try? d.write(to: url)
-                record["photo\(i+1)"] = CKAsset(fileURL: url)
+            for i in 1...6 {
+                if i <= images.count {
+                    let d = images[i-1]
+                    let url = URL(fileURLWithPath: NSTemporaryDirectory())
+                        .appendingPathComponent(UUID().uuidString + ".jpg")
+                    try? d.write(to: url)
+                    record["photo\(i)"] = CKAsset(fileURL: url)
+                } else {
+                    record["photo\(i)"] = nil
+                }
             }
             CKContainer.default().publicCloudDatabase.save(record) { _, _ in }
         }

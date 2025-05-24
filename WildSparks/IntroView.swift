@@ -21,7 +21,8 @@ struct IntroView: View {
                         .cornerRadius(10)
                 }
                 .padding()
-
+//what da fuck
+                
                 // Navigation link to HomeView
                 NavigationLink(
                     destination: ContentView(),

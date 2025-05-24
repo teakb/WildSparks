@@ -7,15 +7,21 @@
 
 import SwiftUI
 import CloudKit
+import StoreKit
 
 @main
 struct WildSparksApp: App {
-    
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @StateObject private var userProfile = UserProfile()
+    @StateObject private var locationManager = LocationManager()
+    @StateObject private var storeManager = StoreManager() // Add this
 
     var body: some Scene {
         WindowGroup {
             OnboardingView()
+                .environmentObject(userProfile)
+                .environmentObject(locationManager)
+                .environmentObject(storeManager)
         }
     }
 }

@@ -1,0 +1,41 @@
+# macOS
+.DS_Store
+*.AppleDouble
+*.LSOverride
+
+# Build generated
+build/
+DerivedData/
+
+# Xcode
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+*.xcscheme
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcuserdatad
+xcuserdata/
+
+# Swift
+*.swiftmodule
+*.swiftdoc
+*.swiftinterface
+
+# Carthage
+Carthage/Build
+Carthage/Checkouts
+
+# CocoaPods
+Pods/
+Podfile.lock
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/test_output
+
+# Local settings
+*.xcconfig.local
