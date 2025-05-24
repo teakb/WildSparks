@@ -12,6 +12,8 @@ struct ProfileView: View {
     @State private var isEditing = false
     @State private var currentUserID: String = ""
     @State private var isLoading = true
+    @State private var showingDeleteConfirmAlert = false // New state for the alert
+    @EnvironmentObject var authManager: AppAuthManager // New Auth Manager
 
     private let gridColumns = [
         GridItem(.flexible(), spacing: 16),
@@ -138,7 +140,30 @@ struct ProfileView: View {
                                         .cornerRadius(12)
                                 }
                                 .padding(.horizontal)
-                                .padding(.bottom, 40)
+
+                                if isEditing {
+                                    Button {
+                                        showingDeleteConfirmAlert = true // Show the alert
+                                    } label: {
+                                        Text("Delete Profile")
+                                            .font(.headline)
+                                            .frame(maxWidth: .infinity)
+                                            .padding()
+                                            .foregroundColor(.red) // Destructive action style
+                                            .background(Color.white) // Less prominent background
+                                            .cornerRadius(12)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 12)
+                                                    .stroke(Color.red, lineWidth: 1) // Red border
+                                            )
+                                    }
+                                    .padding(.horizontal)
+                                    .padding(.bottom, 40) // Keep original bottom padding for the container
+                                } else {
+                                    // Add bottom padding when delete button is not visible to maintain layout
+                                    Spacer()
+                                        .frame(height: 40)
+                                }
                             }
                             .padding(.leading, 8)
                             .padding(.trailing, 16)
@@ -146,6 +171,14 @@ struct ProfileView: View {
                         }
                     }
                 }
+            }
+            .alert("Delete Profile?", isPresented: $showingDeleteConfirmAlert) {
+                Button("Delete", role: .destructive) {
+                    deleteUserProfile() // Call the new delete function
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("Are you sure you want to delete your profile? This action cannot be undone.")
             }
             .navigationBarTitle("Profile", displayMode: .inline)
             .toolbar {
@@ -923,6 +956,49 @@ struct ProfileView: View {
             }
         }
         selectedItems = []
+    }
+
+    private func deleteUserProfile() {
+        guard let userIdentifier = UserDefaults.standard.string(forKey: "appleUserIdentifier"), !userIdentifier.isEmpty else {
+            print("Error: appleUserIdentifier not found or empty in UserDefaults.")
+            return
+        }
+
+        let recordID = CKRecord.ID(recordName: "\(userIdentifier)_profile")
+        let publicDatabase = CKContainer.default().publicCloudDatabase
+
+        publicDatabase.delete(withRecordID: recordID) { deletedRecordID, error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    print("Error deleting profile from CloudKit: \(error.localizedDescription)")
+                    // Optionally, present an error message to the user here
+                    return
+                }
+
+                if deletedRecordID != nil {
+                    print("Successfully deleted profile record from CloudKit with ID: \(recordID.recordName)")
+
+                    UserDefaults.standard.removeObject(forKey: "appleUserIdentifier")
+                    print("Removed appleUserIdentifier from UserDefaults.")
+
+                    self.profile.reset() // Reset the UserProfile object
+                    self.images.removeAll() // Clear local images
+                    self.isEditing = false // Exit editing mode
+                    self.currentUserID = "" // Clear current user ID
+                    // Optionally reset other local state like feet/inches if they are not reset by profile.reset()
+                    // self.feet = 5 // Default value
+                    // self.inches = 6 // Default value
+                    
+                    // Consider if navigation or UI should change, e.g., navigate to a login/welcome screen.
+                    // For now, it just clears the view.
+                    self.authManager.isAuthenticated = false // Navigate back to OnboardingView
+                    print("User profile deleted successfully locally. Navigating to OnboardingView.")
+                } else {
+                    // This case should ideally not happen if error is nil, but good to log.
+                    print("CloudKit deletion reported success but record ID was nil.")
+                }
+            }
+        }
     }
 
     private func movePhoto(from sourceIndex: Int, to targetIndex: Int) {

@@ -6,9 +6,10 @@ struct OnboardingView: View {
     @EnvironmentObject var userProfile: UserProfile // Add this
     @EnvironmentObject var locationManager: LocationManager // Add this
     @EnvironmentObject var storeManager: StoreManager // Add this
-    @State private var isSignedIn = false
-    @State private var isNewUser = false
-    @State private var navigateToHome = false
+    @EnvironmentObject var authManager: AppAuthManager // New Auth Manager
+    @State private var isNewUser = false // This might still be useful for logic within OnboardingView
+    // @State private var isSignedIn = false // Replaced by authManager.isAuthenticated
+    @State private var navigateToHome = false // This will be replaced by authManager.isAuthenticated for ContentView
     @State private var navigateToOnboardingForm = false
     
     private let signInWithAppleManager = SignInWithAppleManager()
@@ -33,7 +34,7 @@ struct OnboardingView: View {
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 20)
                     
-                    if !isSignedIn {
+                    if !authManager.isAuthenticated { // Use authManager
                         SignInWithAppleButton(
                             .signIn,
                             onRequest: { request in
@@ -44,7 +45,14 @@ struct OnboardingView: View {
                                 case .success(let authorization):
                                     signInWithAppleManager.handleAuthorization(authorization) { success in
                                         if success {
+                                            // checkForExistingProfile() will be called which sets isAuthenticated
+                                            // For now, let checkForExistingProfile handle setting isAuthenticated.
+                                            // If direct login without profile check was needed, we'd set it here.
                                             checkForExistingProfile()
+                                        } else {
+                                            DispatchQueue.main.async {
+                                                self.authManager.isAuthenticated = false
+                                            }
                                         }
                                     }
                                 case .failure(let error):
@@ -83,28 +91,33 @@ struct OnboardingView: View {
                 }
             }
             .onAppear {
-                signInWithAppleManager.restorePreviousSignIn { isNew in
-                    self.isNewUser = isNew
-                    self.isSignedIn = !isNew
-                    
-                    if self.isSignedIn {
-                        checkForExistingProfile()
+                signInWithAppleManager.restorePreviousSignIn { isNewUserSignIn in
+                    DispatchQueue.main.async {
+                        self.isNewUser = isNewUserSignIn
+                        if !isNewUserSignIn { // User was previously signed in and authorized
+                            // We need to check if a profile exists to fully authenticate
+                            checkForExistingProfile()
+                        } else { // New user or revoked
+                            self.authManager.isAuthenticated = false
+                        }
                     }
                 }
             }
-            .navigationDestination(isPresented: $navigateToHome) {
+            .navigationDestination(isPresented: $authManager.isAuthenticated) { // Controlled by authManager
                 ContentView()
                     .environmentObject(userProfile) // Pass environment objects
                     .environmentObject(locationManager)
                     .environmentObject(storeManager)
+                    .environmentObject(authManager) // Pass authManager too
             }
             .navigationDestination(isPresented: $navigateToOnboardingForm) {
                 OnboardingForm()
                     .environmentObject(userProfile) // Pass environment objects
                     .environmentObject(locationManager)
                     .environmentObject(storeManager)
+                    .environmentObject(authManager) // Pass authManager too
             }
-            .animation(.easeInOut, value: isSignedIn)
+            .animation(.easeInOut, value: authManager.isAuthenticated) // Animate based on authManager
         }
     }
     
@@ -116,14 +129,23 @@ struct OnboardingView: View {
         
         let recordID = CKRecord.ID(recordName: "\(userIdentifier)_profile")
         CKContainer.default().publicCloudDatabase.fetch(withRecordID: recordID) { record, error in
-            if let error = error as? CKError, error.code == .unknownItem {
-                print("No existing profile found — redirecting to onboarding")
-                self.navigateToOnboardingForm = true
-            } else if record != nil {
-                print("Existing profile found — redirecting to home")
-                self.navigateToHome = true
-            } else if let error = error {
-                print("Error checking profile: \(error.localizedDescription)")
+            DispatchQueue.main.async {
+                if let error = error as? CKError, error.code == .unknownItem {
+                    print("No existing profile found — redirecting to onboarding form.")
+                    self.authManager.isAuthenticated = false // Not fully authenticated without profile
+                    self.navigateToOnboardingForm = true
+                } else if record != nil {
+                    print("Existing profile found — user is authenticated.")
+                    self.authManager.isAuthenticated = true // User has a profile, so they are authenticated
+                    // self.navigateToHome = true // This is now handled by navigationDestination with $authManager.isAuthenticated
+                } else if let error = error {
+                    print("Error checking profile: \(error.localizedDescription)")
+                    self.authManager.isAuthenticated = false
+                } else {
+                    // Should not happen, but good to handle
+                    print("Unknown state in checkForExistingProfile.")
+                    self.authManager.isAuthenticated = false
+                }
             }
         }
     }
@@ -141,43 +163,55 @@ class SignInWithAppleManager: NSObject, ASAuthorizationControllerDelegate {
             print("Email: \(email ?? "")")
             
             UserDefaults.standard.set(userIdentifier, forKey: "appleUserIdentifier")
-            
-            let recordID = CKRecord.ID(recordName: userIdentifier)
-            let record = CKRecord(recordType: "User", recordID: recordID)
-            record["fullName"] = "\(fullName?.givenName ?? "") \(fullName?.familyName ?? "")" as NSString
-            record["email"] = email as NSString?
-            
-            CKContainer.default().publicCloudDatabase.save(record) { _, error in
-                if let error = error {
-                    print("Error saving to CloudKit: \(error.localizedDescription)")
-                    completion(false)
-                } else {
-                    print("User saved to CloudKit")
-                    completion(true)
-                }
+            // Storing email and name if available from Apple ID, can be used in OnboardingForm
+            if let email = email {
+                UserDefaults.standard.set(email, forKey: "userEmailFromAppleID")
             }
+            if let fullName = fullName {
+                let nameFormatter = PersonNameComponentsFormatter()
+                UserDefaults.standard.set(nameFormatter.string(from: fullName), forKey: "userNameFromAppleID")
+            }
+
+            // No need to save a separate "User" record here if "UserProfile" is the main user data store.
+            // The existence of a "UserProfile" record (e.g., "\(userIdentifier)_profile") will determine if new.
+            // Let's assume the original logic intended to check for a "UserProfile" later.
+            // For now, just mark as successful Apple Sign-In. Profile check will determine next step.
+            completion(true)
+            // Original CloudKit save for 'User' record is removed as profile check handles user existence.
+            // If a simple 'User' record (not profile) was intended, it would be kept.
+            // Assuming the main goal is to get to profile creation/loading.
         } else {
-            completion(false)
+            completion(false) // Apple Sign-In itself failed
         }
     }
     
-    func restorePreviousSignIn(completion: @escaping (Bool) -> Void) {
+    func restorePreviousSignIn(completion: @escaping (Bool) -> Void) { // completion true if new user, false if existing & authorized
         if let userIdentifier = UserDefaults.standard.string(forKey: "appleUserIdentifier") {
             let provider = ASAuthorizationAppleIDProvider()
-            provider.getCredentialState(forUserID: userIdentifier) { state, _ in
-                switch state {
-                case .authorized:
-                    print("User is still authorized")
-                    completion(false)
-                case .revoked, .notFound:
-                    print("User is not signed in")
-                    completion(true)
-                default:
-                    completion(true)
+            provider.getCredentialState(forUserID: userIdentifier) { state, error in
+                DispatchQueue.main.async {
+                    switch state {
+                    case .authorized:
+                        print("User is still authorized with Apple ID.")
+                        // User is authorized with Apple, now check for profile.
+                        // This completion(false) means "not a new user for Apple Sign In".
+                        // The actual isAuthenticated state will be set by checkForExistingProfile.
+                        completion(false)
+                    case .revoked, .notFound:
+                        print("User Apple ID session revoked or not found.")
+                        UserDefaults.standard.removeObject(forKey: "appleUserIdentifier") // Clean up
+                        completion(true) // Is a new user (or needs to sign in again)
+                    default:
+                        print("Unknown Apple ID credential state.")
+                        completion(true) // Treat as new user
+                    }
                 }
             }
         } else {
-            completion(true)
+            print("No userIdentifier in UserDefaults. New user.")
+            DispatchQueue.main.async {
+                completion(true) // Is a new user
+            }
         }
     }
 }

@@ -15,6 +15,7 @@ struct WildSparksApp: App {
     @StateObject private var userProfile = UserProfile()
     @StateObject private var locationManager = LocationManager()
     @StateObject private var storeManager = StoreManager() // Add this
+    @StateObject private var authManager = AppAuthManager() // New Auth Manager
 
     var body: some Scene {
         WindowGroup {
@@ -22,6 +23,7 @@ struct WildSparksApp: App {
                 .environmentObject(userProfile)
                 .environmentObject(locationManager)
                 .environmentObject(storeManager)
+                .environmentObject(authManager) // Pass Auth Manager
         }
     }
 }
