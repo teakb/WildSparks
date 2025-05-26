@@ -83,6 +83,19 @@ struct OnboardingView: View {
                 }
             }
             .onAppear {
+                // Reset navigation flags
+                self.navigateToHome = false
+                self.navigateToOnboardingForm = false
+
+                // Handle the case where the user is logged out
+                if UserDefaults.standard.string(forKey: "appleUserIdentifier") == nil {
+                    print("OnboardingView: No appleUserIdentifier found. User is logged out.")
+                    self.isSignedIn = false
+                    // self.navigateToOnboardingForm = false // Already set above
+                    // self.navigateToHome = false // Already set above
+                    // Do not return, proceed to restorePreviousSignIn to allow re-authentication
+                }
+
                 signInWithAppleManager.restorePreviousSignIn { isNew in
                     self.isNewUser = isNew
                     self.isSignedIn = !isNew
@@ -116,14 +129,17 @@ struct OnboardingView: View {
         
         let recordID = CKRecord.ID(recordName: "\(userIdentifier)_profile")
         CKContainer.default().publicCloudDatabase.fetch(withRecordID: recordID) { record, error in
-            if let error = error as? CKError, error.code == .unknownItem {
-                print("No existing profile found — redirecting to onboarding")
-                self.navigateToOnboardingForm = true
-            } else if record != nil {
-                print("Existing profile found — redirecting to home")
-                self.navigateToHome = true
-            } else if let error = error {
-                print("Error checking profile: \(error.localizedDescription)")
+            DispatchQueue.main.async {
+                if let error = error as? CKError, error.code == .unknownItem {
+                    print("No existing profile found — redirecting to onboarding")
+                    self.navigateToOnboardingForm = true
+                } else if record != nil {
+                    print("Existing profile found — redirecting to home")
+                    self.navigateToHome = true
+                } else if let error = error {
+                    print("Error checking profile: \(error.localizedDescription)")
+                    // Consider how to handle this error in the UI, if necessary
+                }
             }
         }
     }
@@ -143,17 +159,39 @@ class SignInWithAppleManager: NSObject, ASAuthorizationControllerDelegate {
             UserDefaults.standard.set(userIdentifier, forKey: "appleUserIdentifier")
             
             let recordID = CKRecord.ID(recordName: userIdentifier)
-            let record = CKRecord(recordType: "User", recordID: recordID)
-            record["fullName"] = "\(fullName?.givenName ?? "") \(fullName?.familyName ?? "")" as NSString
-            record["email"] = email as NSString?
+            let publicDB = CKContainer.default().publicCloudDatabase
             
-            CKContainer.default().publicCloudDatabase.save(record) { _, error in
-                if let error = error {
-                    print("Error saving to CloudKit: \(error.localizedDescription)")
+            publicDB.fetch(withRecordID: recordID) { fetchedRecord, error in
+                if let fetchedRecord = fetchedRecord {
+                    // Record already exists
+                    print("User record for \(userIdentifier) already exists, no need to save.")
+                    // Optionally, update existing record if new data is available and different
+                    // For now, just complete successfully
+                    completion(true)
+                } else if let ckError = error as? CKError, ckError.code == .unknownItem {
+                    // Record does not exist, proceed to create and save
+                    print("User record for \(userIdentifier) not found, creating new record.")
+                    let newRecord = CKRecord(recordType: "User", recordID: recordID)
+                    newRecord["fullName"] = "\(fullName?.givenName ?? "") \(fullName?.familyName ?? "")" as NSString
+                    newRecord["email"] = email as NSString? // email can be nil
+                    
+                    publicDB.save(newRecord) { _, saveError in
+                        if let saveError = saveError {
+                            print("Error saving new user record to CloudKit: \(saveError.localizedDescription)")
+                            completion(false)
+                        } else {
+                            print("New user record saved to CloudKit for \(userIdentifier)")
+                            completion(true)
+                        }
+                    }
+                } else if let error = error {
+                    // Other fetch error
+                    print("Error fetching user record from CloudKit: \(error.localizedDescription)")
                     completion(false)
                 } else {
-                    print("User saved to CloudKit")
-                    completion(true)
+                    // Should not happen, but as a fallback
+                    print("Unknown error fetching user record, record is nil but no CKError.unknownItem")
+                    completion(false)
                 }
             }
         } else {

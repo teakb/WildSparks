@@ -4,6 +4,9 @@ import PhotosUI
 
 struct ProfileView: View {
     @ObservedObject var profile = UserProfile()
+    @EnvironmentObject var locationManager: LocationManager // Added for OnboardingView
+    @EnvironmentObject var storeManager: StoreManager     // Added for OnboardingView
+    @EnvironmentObject var environmentUserProfile: UserProfile
     @State private var images: [Data] = []
     @State private var selectedItems: [PhotosPickerItem] = []
     @State private var feet: Int = 5
@@ -12,6 +15,9 @@ struct ProfileView: View {
     @State private var isEditing = false
     @State private var currentUserID: String = ""
     @State private var isLoading = true
+    @State private var showingDeleteConfirmationAlert: Bool = false // New state variable for the alert
+    @State private var profileDeletionCompleted: Bool = false // For navigation after deletion
+    @State private var showingOnboarding: Bool = false
 
     private let gridColumns = [
         GridItem(.flexible(), spacing: 16),
@@ -138,7 +144,37 @@ struct ProfileView: View {
                                         .cornerRadius(12)
                                 }
                                 .padding(.horizontal)
-                                .padding(.bottom, 40)
+                                // Add the Delete Profile button here
+                                Button {
+                                    // Action for deleting profile (to be implemented)
+                                // print("Delete Profile tapped") // Original action
+                                showingDeleteConfirmationAlert = true // Show the confirmation alert
+                                } label: {
+                                    Text("Delete Profile")
+                                        .font(.headline)
+                                        .frame(maxWidth: .infinity)
+                                        .padding()
+                                        .background(Color.red) // Red background for destructive action
+                                        .foregroundColor(.white) // White text for contrast
+                                        .cornerRadius(12)
+                                }
+                                .padding(.horizontal)
+                                // Add the Log Out button here
+                                Button {
+                                    UserDefaults.standard.removeObject(forKey: "appleUserIdentifier")
+                                    environmentUserProfile.reset() // Reset the UserProfile
+                                    showingOnboarding = true
+                                } label: {
+                                    Text("Log Out")
+                                        .font(.headline)
+                                        .frame(maxWidth: .infinity)
+                                        .padding()
+                                        .background(Color.gray) // Using gray for the background
+                                        .foregroundColor(.white)
+                                        .cornerRadius(12)
+                                }
+                                .padding(.horizontal)
+                                .padding(.bottom, 40) // Keep consistent padding
                             }
                             .padding(.leading, 8)
                             .padding(.trailing, 16)
@@ -165,6 +201,27 @@ struct ProfileView: View {
                     currentUserID = uid
                 }
                 loadProfile()
+            }
+            .alert("Confirm Deletion", isPresented: $showingDeleteConfirmationAlert) {
+                Button("Delete", role: .destructive) {
+                    deleteProfile() // Call the new delete function
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("Are you sure you want to delete your profile? This action cannot be undone.")
+            }
+            .navigationDestination(isPresented: $profileDeletionCompleted) {
+                OnboardingView()
+                    .environmentObject(profile) // Pass existing profile (might need reset)
+                    .environmentObject(locationManager)
+                    .environmentObject(storeManager)
+                    .navigationBarBackButtonHidden(true) // Hide back button to prevent going back to ProfileView
+            }
+            .fullScreenCover(isPresented: $showingOnboarding) { // Use fullScreenCover for OnboardingView
+                OnboardingView()
+                    .environmentObject(UserProfile()) // Provide a fresh UserProfile
+                    .environmentObject(locationManager)
+                    .environmentObject(storeManager)
             }
         }
     }
@@ -1050,6 +1107,65 @@ struct ProfileView: View {
                 }
             }
             CKContainer.default().publicCloudDatabase.save(record) { _, _ in }
+        }
+    }
+
+    private func deleteProfile() {
+        print("Attempting to delete profile...")
+        guard let userIdentifier = UserDefaults.standard.string(forKey: "appleUserIdentifier") else {
+            print("Error: User identifier not found in UserDefaults.")
+            return
+        }
+        print("User identifier retrieved: \(userIdentifier)")
+
+        let profileRecordID = CKRecord.ID(recordName: "\(userIdentifier)_profile")
+        let userRecordID = CKRecord.ID(recordName: userIdentifier)
+        let publicDB = CKContainer.default().publicCloudDatabase
+
+        print("Attempting to delete UserProfile record: \(profileRecordID.recordName)")
+        publicDB.delete(withRecordID: profileRecordID) { deletedProfileRecordID, error in
+            if let error = error {
+                print("Error deleting UserProfile record: \(error.localizedDescription)")
+                // Optionally, decide if you still want to try deleting the base User record or stop.
+                // For this implementation, we'll still try to delete the base User record.
+            } else {
+                print("UserProfile record deleted successfully (or was already deleted): \(String(describing: deletedProfileRecordID?.recordName))")
+            }
+
+            print("Attempting to delete User record: \(userRecordID.recordName)")
+            publicDB.delete(withRecordID: userRecordID) { deletedUserRecordID, userError in
+                if let userError = userError {
+                    // Check if the error is "unknown item" (record not found), which is acceptable.
+                    if let ckError = userError as? CKError, ckError.code == .unknownItem {
+                        print("User record not found (already deleted or never existed), which is acceptable: \(userRecordID.recordName)")
+                        // Proceed to clear UserDefaults as the main profile data is gone or was never there.
+                        UserDefaults.standard.removeObject(forKey: "appleUserIdentifier")
+                        print("appleUserIdentifier removed from UserDefaults.")
+                        // Potentially navigate the user away or update UI
+                        DispatchQueue.main.async {
+                            // Example: Reset view state or navigate to a logged-out screen
+                            // self.isLoading = true // Or some other state to indicate logged out
+                            // self.profile = UserProfile() // Reset profile data model
+                            // self.images = []
+                            self.profileDeletionCompleted = true // Navigate to OnboardingView
+                        }
+                    } else {
+                        print("Error deleting User record: \(userError.localizedDescription)")
+                    }
+                } else {
+                    print("User record deleted successfully: \(String(describing: deletedUserRecordID?.recordName))")
+                    UserDefaults.standard.removeObject(forKey: "appleUserIdentifier")
+                    print("appleUserIdentifier removed from UserDefaults.")
+                    // Potentially navigate the user away or update UI
+                    DispatchQueue.main.async {
+                        // Example: Reset view state or navigate to a logged-out screen
+                            // self.isLoading = true // Or some other state to indicate logged out
+                        // self.profile = UserProfile() // Reset profile data model
+                        // self.images = []
+                            self.profileDeletionCompleted = true // Navigate to OnboardingView
+                    }
+                }
+            }
         }
     }
 }

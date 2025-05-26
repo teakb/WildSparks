@@ -120,6 +120,59 @@ class UserProfile: ObservableObject {
             fieldVisibilities[key] = .everyone
         }
     }
+
+    public func reset() {
+        name = ""
+        age = 0
+        email = ""
+        phoneNumber = ""
+        gender = ""
+        sexuality = ""
+        height = ""
+        drinks = false
+        smokes = false
+        smokesWeed = false
+        usesDrugs = false
+        pets = ""
+        wantsChildren = false
+        hasChildren = false
+        religion = ""
+        ethnicity = ""
+        hometown = ""
+        politicalView = ""
+        zodiacSign = ""
+        languagesSpoken = ""
+        educationLevel = ""
+        college = ""
+        jobTitle = ""
+        companyName = ""
+        interestedIn = ""
+        datingIntentions = ""
+        relationshipType = ""
+        socialMediaLinks = ""
+        politicalEngagementLevel = ""
+        dietaryPreferences = ""
+        exerciseHabits = ""
+        interests = ""
+        preferredAgeRange = 25...35
+        preferredEthnicities = []
+
+        // Re-initialize fieldVisibilities
+        fieldVisibilities = [:]
+        let keys = [
+            "email", "phoneNumber", "gender", "sexuality", "height",
+            "drinks", "smokes", "smokesWeed", "usesDrugs",
+            "pets", "hasChildren", "wantsChildren", "religion", "ethnicity", "hometown",
+            "politicalView", "zodiacSign", "languagesSpoken", "educationLevel",
+            "college", "jobTitle", "companyName", "interestedIn",
+            "datingIntentions", "relationshipType", "socialMediaLinks",
+            "politicalEngagementLevel", "dietaryPreferences",
+            "exerciseHabits", "interests"
+        ]
+        for key in keys {
+            fieldVisibilities[key] = .everyone
+        }
+    }
 }
 
 // MARK: - Custom ViewModifier for TextFields
