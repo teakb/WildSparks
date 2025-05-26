@@ -39,7 +39,7 @@ struct WildSparksApp: App {
                     .environmentObject(locationManager)
                     .environmentObject(storeManager)
             case .onboarding:
-                OnboardingView()
+                OnboardingView(signInWithAppleManager: self.signInWithAppleManager) // Pass the instance
                     .environmentObject(userProfile)
                     .environmentObject(locationManager)
                     .environmentObject(storeManager)

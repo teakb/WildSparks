@@ -10,8 +10,8 @@ struct OnboardingView: View {
     @State private var navigateToHome = false
     @State private var navigateToOnboardingForm = false
     
-    // OnboardingView now manages its own SignInWithAppleManager instance for the button action.
-    private let signInWithAppleManager = SignInWithAppleManager()
+    // This property will be initialized by WildSparksApp
+    let signInWithAppleManager: SignInWithAppleManager
     
     var body: some View {
         NavigationStack {
@@ -137,96 +137,16 @@ struct OnboardingView: View {
     }
 }
 
-// SignInWithAppleManager remains defined locally in OnboardingView
-// as it's directly used by the SignInWithAppleButton in this view.
-// Its restorePreviousSignIn method is no longer called by OnboardingView's .onAppear,
-// but handleAuthorization is crucial for the button's action.
-class SignInWithAppleManager: NSObject, ASAuthorizationControllerDelegate {
-    func handleAuthorization(_ authorization: ASAuthorization, completion: @escaping (Bool) -> Void) {
-        if let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential {
-            let userIdentifier = appleIDCredential.user
-            let fullName = appleIDCredential.fullName
-            let email = appleIDCredential.email
-            
-            print("OnboardingView.SignInManager: User ID: \(userIdentifier)")
-            if let given = fullName?.givenName, let family = fullName?.familyName {
-                print("OnboardingView.SignInManager: Full Name: \(given) \(family)")
-            }
-            if let mail = email {
-                print("OnboardingView.SignInManager: Email: \(mail)")
-            }
-            
-            UserDefaults.standard.set(userIdentifier, forKey: "appleUserIdentifier")
-            
-            // CloudKit saving logic might be redundant if WildSparksApp handles user creation/update upon sign-in.
-            // However, for now, keeping it to ensure user record is created/updated.
-            // This could be a point of future refactoring to centralize User record creation.
-            let recordID = CKRecord.ID(recordName: userIdentifier) // Using just userIdentifier for "User" record for simplicity, profile is separate
-            let userRecord = CKRecord(recordType: "User", recordID: recordID) // Changed to "User" record type
-            
-            var nameToSave = ""
-            if let givenName = fullName?.givenName, !givenName.isEmpty {
-                nameToSave += givenName
-            }
-            if let familyName = fullName?.familyName, !familyName.isEmpty {
-                nameToSave += (nameToSave.isEmpty ? "" : " ") + familyName
-            }
-            
-            if !nameToSave.isEmpty {
-                userRecord["fullName"] = nameToSave as CKRecordValue
-            }
-            if let email = email, !email.isEmpty {
-                userRecord["email"] = email as CKRecordValue
-            }
-            
-            CKContainer.default().publicCloudDatabase.save(userRecord) { _, error in
-                DispatchQueue.main.async {
-                    if let error = error {
-                        print("OnboardingView.SignInManager: Error saving user to CloudKit: \(error.localizedDescription)")
-                        completion(false)
-                    } else {
-                        print("OnboardingView.SignInManager: User saved to CloudKit")
-                        completion(true)
-                    }
-                }
-            }
-        } else {
-            DispatchQueue.main.async {
-                completion(false)
-            }
-        }
-    }
-    
-    // restorePreviousSignIn is kept in case it's needed for other purposes within this manager,
-    // but it's not used by OnboardingView's .onAppear anymore.
-    func restorePreviousSignIn(completion: @escaping (Bool) -> Void) {
-        if let userIdentifier = UserDefaults.standard.string(forKey: "appleUserIdentifier") {
-            let provider = ASAuthorizationAppleIDProvider()
-            provider.getCredentialState(forUserID: userIdentifier) { state, _ in
-                DispatchQueue.main.async {
-                    switch state {
-                    case .authorized:
-                        print("OnboardingView.SignInManager: User is still authorized (checked by local manager)")
-                        completion(false) 
-                    case .revoked, .notFound:
-                        print("OnboardingView.SignInManager: User is revoked or not found (checked by local manager)")
-                        completion(true) 
-                    default:
-                        print("OnboardingView.SignInManager: Unknown credential state (checked by local manager)")
-                        completion(true)
-                    }
-                }
-            }
-        } else {
-            DispatchQueue.main.async {
-                completion(true)
-            }
-        }
-    }
-}
+// SignInWithAppleManager class definition is now removed from OnboardingView.swift.
+// It will rely on the instance provided by WildSparksApp.swift.
 
+// Preview needs to be updated to provide an instance of SignInWithAppleManager.
+// For simplicity, we can use a dummy instance if SignInWithAppleManager has a default initializer.
+// If SignInWithAppleManager requires specific setup, a more complex mock might be needed.
 #Preview {
-    OnboardingView()
+    // Assuming SignInWithAppleManager has an accessible initializer (e.g., public init() or is in the same module)
+    // If not, this preview might cause a compile error and would need a proper mock or adjustment.
+    OnboardingView(signInWithAppleManager: SignInWithAppleManager())
         .environmentObject(UserProfile())
         .environmentObject(LocationManager())
         .environmentObject(StoreManager())
