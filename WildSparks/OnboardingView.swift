@@ -83,6 +83,14 @@ struct OnboardingView: View {
                 }
             }
             .onAppear {
+                // Directly navigate to OnboardingForm if userIdentifier is missing
+                if UserDefaults.standard.string(forKey: "appleUserIdentifier") == nil {
+                    print("OnboardingView: No appleUserIdentifier found, navigating to OnboardingForm.")
+                    self.navigateToOnboardingForm = true
+                    self.isSignedIn = false // Ensure UI consistency
+                    return // Prevent other checks
+                }
+
                 signInWithAppleManager.restorePreviousSignIn { isNew in
                     self.isNewUser = isNew
                     self.isSignedIn = !isNew
