@@ -11,7 +11,11 @@ struct OnboardingView: View {
     @State private var navigateToOnboardingForm = false
     
     // This property will be initialized by WildSparksApp
-    let signInWithAppleManager: SignInWithAppleManager
+    let appleSignInManager: SignInWithAppleManager // MODIFIED HERE
+
+    init(appleSignInManager: SignInWithAppleManager) { // Initializer to accept the instance
+        self.appleSignInManager = appleSignInManager
+    }
     
     var body: some View {
         NavigationStack {
@@ -42,11 +46,10 @@ struct OnboardingView: View {
                         onCompletion: { result in
                             switch result {
                             case .success(let authorization):
-                                // Use the local signInWithAppleManager
-                                signInWithAppleManager.handleAuthorization(authorization) { success in
+                                // Use the PASSED-IN appleSignInManager instance
+                                self.appleSignInManager.handleAuthorization(authorization) { success in // MODIFIED HERE
                                     if success {
-                                        // Call the local checkForExistingProfile
-                                        checkForExistingProfile()
+                                        self.checkForExistingProfile()
                                     } else {
                                         // Handle authorization failure if needed, e.g., show an alert
                                         print("OnboardingView: Sign in with Apple authorization failed.")
@@ -143,10 +146,10 @@ struct OnboardingView: View {
 // Preview needs to be updated to provide an instance of SignInWithAppleManager.
 // For simplicity, we can use a dummy instance if SignInWithAppleManager has a default initializer.
 // If SignInWithAppleManager requires specific setup, a more complex mock might be needed.
-#Preview {
-    // Assuming SignInWithAppleManager has an accessible initializer (e.g., public init() or is in the same module)
-    // If not, this preview might cause a compile error and would need a proper mock or adjustment.
-    OnboardingView(signInWithAppleManager: SignInWithAppleManager())
+#Preview { // Or OnboardingView_Previews
+    // Assumes SignInWithAppleManager is defined elsewhere (e.g., WildSparksApp.swift)
+    // and accessible for preview.
+    OnboardingView(appleSignInManager: SignInWithAppleManager()) 
         .environmentObject(UserProfile())
         .environmentObject(LocationManager())
         .environmentObject(StoreManager())
