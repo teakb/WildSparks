@@ -8,20 +8,182 @@
 import SwiftUI
 import CloudKit
 import StoreKit
+import AuthenticationServices // Needed for ASAuthorizationAppleIDProvider
+
+enum InitialViewState {
+    case loading
+    case onboarding
+    case onboardingForm
+    case contentView
+}
 
 @main
 struct WildSparksApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @State private var currentInitialViewState: InitialViewState = .loading
     @StateObject private var userProfile = UserProfile()
     @StateObject private var locationManager = LocationManager()
     @StateObject private var storeManager = StoreManager() // Add this
+    private let signInWithAppleManager = SignInWithAppleManager()
+
+    init() {
+        determineInitialView()
+    }
 
     var body: some Scene {
         WindowGroup {
-            OnboardingView()
-                .environmentObject(userProfile)
-                .environmentObject(locationManager)
-                .environmentObject(storeManager)
+            switch currentInitialViewState {
+            case .loading:
+                LoadingView()
+                    .environmentObject(userProfile)
+                    .environmentObject(locationManager)
+                    .environmentObject(storeManager)
+            case .onboarding:
+                OnboardingView()
+                    .environmentObject(userProfile)
+                    .environmentObject(locationManager)
+                    .environmentObject(storeManager)
+            case .onboardingForm:
+                OnboardingForm()
+                    .environmentObject(userProfile)
+                    .environmentObject(locationManager)
+                    .environmentObject(storeManager)
+            case .contentView:
+                ContentView()
+                    .environmentObject(userProfile)
+                    .environmentObject(locationManager)
+                    .environmentObject(storeManager)
+            }
+        }
+    }
+
+    // MARK: - Initial View Logic
+    private func determineInitialView() {
+        // If no userIdentifier, means first launch or signed out fully.
+        guard UserDefaults.standard.string(forKey: "appleUserIdentifier") != nil else {
+            print("App: No appleUserIdentifier found, showing Onboarding.")
+            currentInitialViewState = .onboarding
+            return
+        }
+
+        // User identifier exists, check their sign-in state
+        restorePreviousSignInStatus()
+    }
+
+    private func restorePreviousSignInStatus() {
+        if let userIdentifier = UserDefaults.standard.string(forKey: "appleUserIdentifier") {
+            let provider = ASAuthorizationAppleIDProvider()
+            provider.getCredentialState(forUserID: userIdentifier) { [self] state, error in
+                DispatchQueue.main.async {
+                    switch state {
+                    case .authorized:
+                        print("App: User is authorized. Checking profile.")
+                        // User is authenticated, now check if profile exists
+                        self.checkForExistingProfileInApp(userIdentifier: userIdentifier)
+                    case .revoked, .notFound:
+                        print("App: User is revoked or not found. Showing Onboarding.")
+                        // User was signed in, but token revoked or not found
+                        UserDefaults.standard.removeObject(forKey: "appleUserIdentifier") // Clear stale identifier
+                        self.currentInitialViewState = .onboarding
+                    default:
+                        print("App: Unknown credential state. Showing Onboarding.")
+                        self.currentInitialViewState = .onboarding
+                    }
+                }
+            }
+        } else {
+            // This case should ideally be caught by the guard in determineInitialView
+            print("App: No userIdentifier in restorePreviousSignInStatus. Should not happen. Showing Onboarding.")
+            DispatchQueue.main.async {
+                self.currentInitialViewState = .onboarding
+            }
+        }
+    }
+
+    private func checkForExistingProfileInApp(userIdentifier: String) {
+        let recordID = CKRecord.ID(recordName: "\(userIdentifier)_profile")
+        CKContainer.default().publicCloudDatabase.fetch(withRecordID: recordID) { record, error in
+            DispatchQueue.main.async {
+                if let error = error as? CKError, error.code == .unknownItem {
+                    print("App: No existing profile found — redirecting to onboarding form.")
+                    self.currentInitialViewState = .onboardingForm
+                } else if record != nil {
+                    print("App: Existing profile found — redirecting to content view.")
+                    // Potentially load profile data into userProfile object here if needed globally
+                    self.currentInitialViewState = .contentView
+                } else if error != nil {
+                    print("App: Error checking profile: \(error?.localizedDescription ?? "Unknown error"). Defaulting to Onboarding.")
+                    // Decide on a fallback, e.g., .onboarding or .loading with an error message
+                    self.currentInitialViewState = .onboarding // Fallback to onboarding
+                } else {
+                    // Should not happen - no record and no error.
+                    print("App: Unexpected state in checkForExistingProfileInApp. Defaulting to Onboarding.")
+                    self.currentInitialViewState = .onboarding
+                }
+            }
+        }
+    }
+}
+
+// MARK: - SignInWithAppleManager
+class SignInWithAppleManager: NSObject, ASAuthorizationControllerDelegate { // ASAuthorizationControllerDelegate might not be needed here anymore if all UI interactions are in OnboardingView
+    func handleAuthorization(_ authorization: ASAuthorization, completion: @escaping (Bool) -> Void) {
+        if let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential {
+            let userIdentifier = appleIDCredential.user
+            let fullName = appleIDCredential.fullName
+            let email = appleIDCredential.email
+            
+            print("User ID: \(userIdentifier)")
+            print("Full Name: \(fullName?.givenName ?? "") \(fullName?.familyName ?? "")")
+            print("Email: \(email ?? "")")
+            
+            UserDefaults.standard.set(userIdentifier, forKey: "appleUserIdentifier")
+            
+            let recordID = CKRecord.ID(recordName: userIdentifier)
+            let record = CKRecord(recordType: "User", recordID: recordID)
+            record["fullName"] = "\(fullName?.givenName ?? "") \(fullName?.familyName ?? "")" as NSString
+            record["email"] = email as NSString?
+            
+            CKContainer.default().publicCloudDatabase.save(record) { _, error in
+                if let error = error {
+                    print("Error saving to CloudKit: \(error.localizedDescription)")
+                    completion(false)
+                } else {
+                    print("User saved to CloudKit")
+                    completion(true)
+                }
+            }
+        } else {
+            completion(false)
+        }
+    }
+    
+    // This restorePreviousSignIn is now part of WildSparksApp's logic (restorePreviousSignInStatus)
+    // It can be removed from SignInWithAppleManager if this manager class is only for handling the button press.
+    // However, OnboardingView might still use a version of this to update its own UI *after* the initial routing.
+    // For now, I'll leave it, but it's a point of potential cleanup.
+    func restorePreviousSignIn(completion: @escaping (Bool) -> Void) {
+        if let userIdentifier = UserDefaults.standard.string(forKey: "appleUserIdentifier") {
+            let provider = ASAuthorizationAppleIDProvider()
+            provider.getCredentialState(forUserID: userIdentifier) { state, _ in // Removed [weak self] as this class is not a view controller and has no lifecycle tied to UI.
+                DispatchQueue.main.async { // Ensure completion handler is called on main thread
+                    switch state {
+                    case .authorized:
+                        print("SignInManager: User is still authorized")
+                        completion(false) // false means not a new user / already signed in
+                    case .revoked, .notFound:
+                        print("SignInManager: User is revoked or not found")
+                        completion(true) // true means new user / needs to sign in
+                    default:
+                        print("SignInManager: Unknown credential state")
+                        completion(true)
+                    }
+                }
+            }
+        } else {
+            DispatchQueue.main.async {
+                completion(true) // true means new user / needs to sign in
+            }
         }
     }
 }
