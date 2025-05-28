@@ -7,7 +7,7 @@ struct ProfileView: View {
     @EnvironmentObject var locationManager: LocationManager // Added for OnboardingView
     @EnvironmentObject var storeManager: StoreManager     // Added for OnboardingView
     @EnvironmentObject var environmentUserProfile: UserProfile
-    @State private var images: [Data] = []
+    @State private var images: [UIImage] = [] // Changed from [Data] to [UIImage]
     @State private var selectedItems: [PhotosPickerItem] = []
     @State private var feet: Int = 5
     @State private var inches: Int = 6
@@ -233,13 +233,11 @@ struct ProfileView: View {
                     ForEach(0..<6, id: \.self) { index in
                         if index < images.count {
                             VStack {
-                                if let ui = UIImage(data: images[index]) {
-                                    Image(uiImage: ui)
-                                        .resizable()
-                                        .scaledToFit()
-                                        .frame(width: 100, height: 100)
-                                        .cornerRadius(10)
-                                }
+                                Image(uiImage: images[index]) // Directly use UIImage
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 100, height: 100)
+                                    .cornerRadius(10)
                                 HStack(spacing: 10) {
                                     if index > 0 {
                                         Button(action: { movePhoto(from: index, to: index - 1) }) {
@@ -282,12 +280,10 @@ struct ProfileView: View {
             } else {
                 TabView {
                     ForEach(images.indices, id: \.self) { index in
-                        if let ui = UIImage(data: images[index]) {
-                            Image(uiImage: ui)
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: width)
-                        }
+                        Image(uiImage: images[index]) // Directly use UIImage
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: width)
                     }
                 }
                 .frame(width: width, height: width)
@@ -972,10 +968,22 @@ struct ProfileView: View {
     }
 
     private func handlePhotoSelection(_ items: [PhotosPickerItem]) {
+        let targetSize = CGSize(width: 600 * UIScreen.main.scale, height: 800 * UIScreen.main.scale) // Define target size
         for item in items {
             item.loadTransferable(type: Data.self) { result in
-                if case .success(let d?) = result {
-                    DispatchQueue.main.async { images.append(d) }
+                switch result {
+                case .success(let data?):
+                    if let resizedImage = UIImage.resizeImage(data: data, to: targetSize) {
+                        DispatchQueue.main.async {
+                            if images.count < 6 {
+                                images.append(resizedImage)
+                            }
+                        }
+                    }
+                case .success(nil):
+                    print("Warning: Photo data was nil.")
+                case .failure(let error):
+                    print("Error loading photo: \(error.localizedDescription)")
                 }
             }
         }
@@ -1042,11 +1050,16 @@ struct ProfileView: View {
                     profile.fieldVisibilities = dict
                 }
                 images.removeAll()
+                let targetSize = CGSize(width: 600 * UIScreen.main.scale, height: 800 * UIScreen.main.scale) // Define target size
                 for i in 1...6 {
-                    if let a = r["photo\(i)"] as? CKAsset,
-                       let url = a.fileURL,
-                       let d = try? Data(contentsOf: url) {
-                        images.append(d)
+                    if let asset = r["photo\(i)"] as? CKAsset,
+                       let fileURL = asset.fileURL,
+                       let data = try? Data(contentsOf: fileURL) {
+                        if let resizedImage = UIImage.resizeImage(data: data, to: targetSize) {
+                            images.append(resizedImage)
+                        } else {
+                            print("Warning: Could not resize image from photo\(i)")
+                        }
                     }
                 }
                 isLoading = false
@@ -1097,11 +1110,15 @@ struct ProfileView: View {
             }
             for i in 1...6 {
                 if i <= images.count {
-                    let d = images[i-1]
-                    let url = URL(fileURLWithPath: NSTemporaryDirectory())
-                        .appendingPathComponent(UUID().uuidString + ".jpg")
-                    try? d.write(to: url)
-                    record["photo\(i)"] = CKAsset(fileURL: url)
+                    let image = images[i-1]
+                    if let imageData = image.jpegData(compressionQuality: 0.8) { // Convert UIImage to Data
+                        let tempURL = URL(fileURLWithPath: NSTemporaryDirectory())
+                            .appendingPathComponent(UUID().uuidString + ".jpg")
+                        try? imageData.write(to: tempURL)
+                        record["photo\(i)"] = CKAsset(fileURL: tempURL)
+                    } else {
+                        record["photo\(i)"] = nil // Or handle error appropriately
+                    }
                 } else {
                     record["photo\(i)"] = nil
                 }
