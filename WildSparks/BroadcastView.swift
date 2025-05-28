@@ -2,10 +2,11 @@ import SwiftUI
 import MapKit
 import CloudKit
 import StoreKit
+import Combine // Added Combine import
 
 // MARK: - Annotation Model
 struct BroadcastAnnotation: Identifiable {
-    let id = UUID()
+    let id: String // Changed from UUID()
     let coordinate: CLLocationCoordinate2D
     let message: String?
     let age: Int
@@ -321,8 +322,16 @@ extension BroadcastView {
         @Published var showingPaywall: Bool = false
         @Published var broadcasterRadiiCache: [String: Double] = [:]
         @Published var isLoadingBroadcasts: Bool = false
+        @Published var showingBroadcastProximityAlert: Bool = false // Added
+        @Published var broadcastProximityAlertMessage: String = "" // Added
+        
+        // For Combine-based location updates
+        private var cancellables = Set<AnyCancellable>()
+        @Published private var lastLoadedLocation: CLLocation? = nil
+        private let significantLocationChangeDistance: CLLocationDistance = 500 // 500 meters
 
         // Constants from BroadcastView
+        private let broadcastCreationProximityLimit: CLLocationDistance = 805 // Approx 0.5 miles in meters
         private let minRadius: Double = 16093.4
         private let maxRadiusNonSubscribed: Double = 16093.4
         private let maxRadiusSubscribed: Double = 80467.2
@@ -353,6 +362,30 @@ extension BroadcastView {
             
             // Call onAppear equivalent logic
             onAppearTasks()
+            
+            // Setup Combine subscriber for location updates
+            self.locationManager.$currentLocation
+                .debounce(for: .seconds(1), scheduler: DispatchQueue.main) // Optional: debounce
+                .compactMap { $0 } // Ensure location is not nil
+                .sink { [weak self] newLocation in
+                    guard let self = self else { return }
+                    
+                    var shouldLoad = false
+                    if let lastLoc = self.lastLoadedLocation {
+                        if newLocation.distance(from: lastLoc) > self.significantLocationChangeDistance {
+                            shouldLoad = true
+                        }
+                    } else {
+                        shouldLoad = true // First location update, or lastLoadedLocation was nil
+                    }
+
+                    if shouldLoad {
+                        print("Location changed significantly or first valid location, reloading broadcasts.")
+                        // self.lastLoadedLocation = newLocation // This will be set in loadNearbyBroadcasts
+                        self.loadNearbyBroadcasts()
+                    }
+                }
+                .store(in: &cancellables)
         }
 
         func onAppearTasks() {
@@ -454,6 +487,19 @@ extension BroadcastView {
             else {
                 print("Error: User ID, Place name or coordinate is missing. Cannot broadcast.")
                 return
+            }
+
+            // Proximity Check
+            guard let userCurrentLocation = locationManager.currentLocation else {
+                self.broadcastProximityAlertMessage = "Could not determine your current location. Please ensure location services are enabled."
+                self.showingBroadcastProximityAlert = true
+                return
+            }
+            let distanceToSelectedPlace = userCurrentLocation.distance(from: CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude))
+            if distanceToSelectedPlace > broadcastCreationProximityLimit {
+                self.broadcastProximityAlertMessage = "You must be within 0.5 miles of the selected location to start a broadcast there."
+                self.showingBroadcastProximityAlert = true
+                return // Prevent broadcast
             }
 
             if !storeManager.isSubscribed && broadcastsLeft <= 0 {
@@ -665,7 +711,7 @@ extension BroadcastView {
                     }
 
                     if isOwnBroadcast {
-                        newAnnotations.append(BroadcastAnnotation(coordinate: broadcastLocation.coordinate, message: broadcastMessage, age: broadcastAge, ethnicity: broadcastEthnicity))
+                        newAnnotations.append(BroadcastAnnotation(id: record.recordID.recordName, coordinate: broadcastLocation.coordinate, message: broadcastMessage, age: broadcastAge, ethnicity: broadcastEthnicity))
                         continue
                     }
 
@@ -675,9 +721,9 @@ extension BroadcastView {
                         continue
                     }
 
-                    // Filter by current user's viewable radius
-                    let maxViewableDistance = self.storeManager.isSubscribed ? self.maxRadiusSubscribed : self.maxRadiusNonSubscribed
-                    guard distanceToBroadcast <= maxViewableDistance else { continue }
+                    // Filter by current user's selected viewable radius
+                    // self.selectedRadius is already capped by subscription status elsewhere (e.g., in loadSavedPreferences, UI controls).
+                    guard distanceToBroadcast <= self.selectedRadius else { continue }
 
                     // Check against broadcaster's set radius
                     dispatchGroup.enter()
@@ -687,7 +733,7 @@ extension BroadcastView {
                             broadcasterSetRadius = cachedRadius
                             if distanceToBroadcast <= broadcasterSetRadius {
                                 DispatchQueue.main.async { // Append to annotations on main thread if it's a @Published array
-                                    newAnnotations.append(BroadcastAnnotation(coordinate: broadcastLocation.coordinate, message: broadcastMessage, age: broadcastAge, ethnicity: broadcastEthnicity))
+                                    newAnnotations.append(BroadcastAnnotation(id: record.recordID.recordName, coordinate: broadcastLocation.coordinate, message: broadcastMessage, age: broadcastAge, ethnicity: broadcastEthnicity))
                                 }
                             }
                             dispatchGroup.leave()
@@ -700,7 +746,7 @@ extension BroadcastView {
                                 }
                                 if distanceToBroadcast <= broadcasterSetRadius {
                                      DispatchQueue.main.async {
-                                        newAnnotations.append(BroadcastAnnotation(coordinate: broadcastLocation.coordinate, message: broadcastMessage, age: broadcastAge, ethnicity: broadcastEthnicity))
+                                        newAnnotations.append(BroadcastAnnotation(id: record.recordID.recordName, coordinate: broadcastLocation.coordinate, message: broadcastMessage, age: broadcastAge, ethnicity: broadcastEthnicity))
                                      }
                                 }
                                 dispatchGroup.leave()
@@ -712,6 +758,7 @@ extension BroadcastView {
                 dispatchGroup.notify(queue: .main) {
                     self.broadcastAnnotations = newAnnotations
                     self.isLoadingBroadcasts = false
+                    self.lastLoadedLocation = currentUserLocation // Update last loaded location
                 }
             }
         }
@@ -946,6 +993,13 @@ struct BroadcastView: View {
         .overlay(radiusPopupOverlay, alignment: .center) // Use computed overlay property
         .sheet(isPresented: $content.showingPaywall) { // Use content's state
             PaywallView() // Assuming PaywallView is defined elsewhere
+        }
+        .alert(isPresented: $content.showingBroadcastProximityAlert) { // Added alert for proximity
+            Alert(
+                title: Text("Broadcast Location Too Far"),
+                message: Text(content.broadcastProximityAlertMessage),
+                dismissButton: .default(Text("OK"))
+            )
         }
         .onAppear {
             // Content's onAppearTasks are called in its init.
