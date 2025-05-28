@@ -40,6 +40,7 @@ struct HomeView: View {
     @EnvironmentObject private var profile: UserProfile
     @EnvironmentObject private var storeManager: StoreManager
     @State private var nearbyUsers: [NearbyUser] = []
+    private var imageCache = NSCache<NSString, UIImage>() // Added image cache
     @State private var showingLocationPrompt = false
     @State private var selectedUser: NearbyUser?
     @State private var likedUserIDs: Set<String> = []
@@ -1138,6 +1139,11 @@ struct HomeView: View {
 
     func fetchNearbyUsers() {
         guard let currentLocation = locationManager.currentLocation else { return }
+
+        // Define target sizes for image resizing
+        let profileImageTargetSize = CGSize(width: 160 * UIScreen.main.scale, height: 280 * UIScreen.main.scale)
+        let galleryImageTargetSize = CGSize(width: 400 * UIScreen.main.scale, height: 600 * UIScreen.main.scale)
+
         let locationQuery = CKQuery(recordType: "UserLocation", predicate: NSPredicate(value: true))
         CKContainer.default().publicCloudDatabase.perform(locationQuery, inZoneWith: nil) { locationRecords, _ in
             guard let locationRecords = locationRecords else { return }
@@ -1252,20 +1258,31 @@ struct HomeView: View {
                     }
 
                     var image: UIImage? = nil
-                    if let asset = rec["photo1"] as? CKAsset,
-                       let url = asset.fileURL,
-                       let data = try? Data(contentsOf: url),
-                       let ui = UIImage(data: data) {
-                        image = ui
+                    var image: UIImage? = nil
+                    if let asset = rec["photo1"] as? CKAsset, let fileURL = asset.fileURL {
+                        let cacheKey = fileURL.absoluteString as NSString
+                        if let cachedImage = imageCache.object(forKey: cacheKey) {
+                            image = cachedImage
+                        } else if let data = try? Data(contentsOf: fileURL) {
+                            if let resizedImage = UIImage.resizeImage(data: data, to: profileImageTargetSize) {
+                                imageCache.setObject(resizedImage, forKey: cacheKey)
+                                image = resizedImage
+                            }
+                        }
                     }
 
                     var photos: [UIImage] = []
                     for i in 1...6 {
-                        if let asset = rec["photo\(i)"] as? CKAsset,
-                           let url = asset.fileURL,
-                           let data = try? Data(contentsOf: url),
-                           let uiImage = UIImage(data: data) {
-                            photos.append(uiImage)
+                        if let asset = rec["photo\(i)"] as? CKAsset, let fileURL = asset.fileURL {
+                            let cacheKey = fileURL.absoluteString as NSString
+                            if let cachedImage = imageCache.object(forKey: cacheKey) {
+                                photos.append(cachedImage)
+                            } else if let data = try? Data(contentsOf: fileURL) {
+                                if let resizedImage = UIImage.resizeImage(data: data, to: galleryImageTargetSize) {
+                                    imageCache.setObject(resizedImage, forKey: cacheKey)
+                                    photos.append(resizedImage)
+                                }
+                            }
                         }
                     }
 
