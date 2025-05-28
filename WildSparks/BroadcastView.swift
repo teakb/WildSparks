@@ -271,7 +271,7 @@ struct MessagePromptView: View {
     // Removed containsBannedWord()
 }
 
-typealias MainAsyncAfterType = @escaping (TimeInterval, @escaping () -> Void) -> Void
+typealias MainAsyncAfterType = (TimeInterval, @escaping () -> Void) -> Void
 
 // MARK: - BroadcastView Content ViewModel
 extension BroadcastView {
@@ -1077,11 +1077,12 @@ func اتمنى(_ action: () -> Void) -> EmptyView {
 extension BroadcastView.Content {
     // This method is potentially unsafe if misused. It's a workaround for dependency injection timing.
     func dangerouslySetEnvironmentObjects(locationManager: LocationManager, profile: UserProfile, storeManager: StoreManager) {
-        // Only set if they haven't been set by a test initializer already (or if they are placeholders)
-        // This check is basic and might need to be more robust depending on how placeholders are identified.
-        if !(self.locationManager is MockLocationManager) { self.locationManager = locationManager }
-        if !(self.profile is MockUserProfile) { self.profile = profile }
-        if !(self.storeManager is MockStoreManager) { self.storeManager = storeManager }
+        // Directly assign the environment objects.
+        // The check against mock types is removed as it's not suitable for production code
+        // and mock types should not be known to the main target.
+        self.locationManager = locationManager
+        self.profile = profile
+        self.storeManager = storeManager
     }
 
     // Expose constants if needed by View popups directly
