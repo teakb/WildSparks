@@ -271,6 +271,8 @@ struct MessagePromptView: View {
     // Removed containsBannedWord()
 }
 
+typealias MainAsyncAfterType = @escaping (TimeInterval, @escaping () -> Void) -> Void
+
 // MARK: - BroadcastView Content ViewModel
 extension BroadcastView {
     @MainActor // Ensure UI updates are on the main thread
@@ -280,7 +282,7 @@ extension BroadcastView {
         private var profile: UserProfile
         private var storeManager: StoreManager
         private var database: CKDatabaseProtocol // For CloudKit interactions
-        private var mainAsyncAfter: (TimeInterval, @escaping () -> Void) -> Void // For DispatchQueue.main.asyncAfter
+        private var mainAsyncAfter: MainAsyncAfterType // For DispatchQueue.main.asyncAfter
 
         // @State properties from BroadcastView
         @Published var region: MKCoordinateRegion
@@ -324,7 +326,7 @@ extension BroadcastView {
                 center: .init(latitude: 37.7749, longitude: -122.4194), // Default initial region
                 span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
             ),
-            mainAsyncAfter: @escaping (TimeInterval, @escaping () -> Void) = { delay, work in DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work) }
+            mainAsyncAfter: @escaping MainAsyncAfterType = { delay, work in DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work) }
         ) {
             self.locationManager = locationManager
             self.profile = profile
