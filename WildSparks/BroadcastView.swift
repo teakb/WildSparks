@@ -167,14 +167,15 @@ struct PlaceSearchView: View {
             do {
                 let search = MKLocalSearch(request: request)
                 let response = try await search.start()
-                if let mapItem = response.mapItems.first, let coordinate = mapItem.placemark.coordinate {
+                if let mapItem = response.mapItems.first {
+                    let coordinate = mapItem.placemark.coordinate // Directly access coordinate
                     DispatchQueue.main.async {
                         self.selectedPlaceName = mapItem.name ?? completion.title
-                        self.selectedPlaceCoordinate = coordinate
+                        self.selectedPlaceCoordinate = coordinate // Assign the non-optional coordinate
                         dismiss()
                     }
                 } else {
-                    // No map item or coordinate found
+                    // This 'else' corresponds to 'if let mapItem = response.mapItems.first' failing
                     DispatchQueue.main.async {
                         self.errorMessage = "Could not retrieve details for the selected place. Please try another."
                         self.showingErrorAlert = true
