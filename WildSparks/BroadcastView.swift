@@ -47,13 +47,15 @@ struct CustomMapView: UIViewRepresentable {
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onTap: onAnnotationTap)
+        Coordinator(parent: self, onTap: onAnnotationTap) // Pass self
     }
 
     class Coordinator: NSObject, MKMapViewDelegate {
+        var parent: CustomMapView // Add this
         let onTap: (CLLocationCoordinate2D, String?) -> Void
 
-        init(onTap: @escaping (CLLocationCoordinate2D, String?) -> Void) {
+        init(parent: CustomMapView, onTap: @escaping (CLLocationCoordinate2D, String?) -> Void) { // Modify init
+            self.parent = parent // Add this
             self.onTap = onTap
             super.init()
         }
@@ -64,6 +66,16 @@ struct CustomMapView: UIViewRepresentable {
             let message = annotation.title ?? nil
             onTap(coordinate, message)
             mapView.deselectAnnotation(annotation, animated: true)
+        }
+        
+        // Add this delegate method:
+        func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
+            // Check to prevent potential feedback loop if not needed,
+            // though with direct binding update it's usually fine.
+            // Ensure the new region is actually different before updating if performance becomes an issue.
+            DispatchQueue.main.async { // Ensure UI updates are on the main thread
+                 self.parent.region = mapView.region
+            }
         }
     }
 }
@@ -97,10 +109,12 @@ class PlaceSearchViewModel: NSObject, ObservableObject, MKLocalSearchCompleterDe
 
 struct PlaceSearchView: View {
     @Environment(\.dismiss) var dismiss
-    @ObservedObject var viewModel = PlaceSearchViewModel()
+    @StateObject var viewModel = PlaceSearchViewModel() // Changed to @StateObject
     @Binding var selectedPlaceName: String?
     @Binding var selectedPlaceCoordinate: CLLocationCoordinate2D?
     @State private var searchTask: Task<Void, Error>?
+    @State private var showingErrorAlert = false // Added for error alert
+    @State private var errorMessage = "" // Added for error message
 
     var body: some View {
         NavigationView {
@@ -139,6 +153,9 @@ struct PlaceSearchView: View {
             .navigationBarItems(leading: Button("Cancel") {
                 dismiss()
             }.accessibilityIdentifier("cancelPlaceSearchButton"))
+            .alert(isPresented: $showingErrorAlert) { // Added alert modifier
+                Alert(title: Text("Search Error"), message: Text(errorMessage), dismissButton: .default(Text("OK")))
+            }
         }
         .accessibilityIdentifier("placeSearchView")
     }
@@ -150,29 +167,26 @@ struct PlaceSearchView: View {
             do {
                 let search = MKLocalSearch(request: request)
                 let response = try await search.start()
-                if let mapItem = response.mapItems.first {
+                if let mapItem = response.mapItems.first, let coordinate = mapItem.placemark.coordinate {
                     DispatchQueue.main.async {
                         self.selectedPlaceName = mapItem.name ?? completion.title
-                        self.selectedPlaceCoordinate = mapItem.placemark.coordinate
+                        self.selectedPlaceCoordinate = coordinate
                         dismiss()
                     }
                 } else {
-                    print("No map item found for completion.")
-                    // Optionally handle no map item found (e.g., show an alert)
-                     DispatchQueue.main.async {
-                        self.selectedPlaceName = completion.title // Fallback to completion title
-                        self.selectedPlaceCoordinate = nil // No coordinate
-                        dismiss() // Or keep the sheet open for another selection
+                    // No map item or coordinate found
+                    DispatchQueue.main.async {
+                        self.errorMessage = "Could not retrieve details for the selected place. Please try another."
+                        self.showingErrorAlert = true
+                        // Do not dismiss, do not update bindings
                     }
                 }
             } catch {
-                print("Error performing local search: \(error.localizedDescription)")
-                // Optionally handle search error (e.g., show an alert)
+                // Error during MKLocalSearch
                 DispatchQueue.main.async {
-                    // Fallback or error display
-                    self.selectedPlaceName = completion.title // Fallback
-                    self.selectedPlaceCoordinate = nil
-                    // Consider not dismissing or showing an error message
+                    self.errorMessage = "An error occurred while searching for the place: \(error.localizedDescription)"
+                    self.showingErrorAlert = true
+                    // Do not dismiss, do not update bindings
                 }
             }
         }
