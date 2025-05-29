@@ -217,20 +217,28 @@ struct LikesView: View {
     private func fetchIncomingLikes() {
         guard let userID = UserDefaults.standard.string(forKey: "appleUserIdentifier") else { return }
         let query = CKQuery(recordType: "Like", predicate: NSPredicate(format: "toUser == %@", userID))
-        CKContainer.default().publicCloudDatabase.perform(query, inZoneWith: nil) { records, _ in
-            let fromIDs = records?.compactMap { $0["fromUser"] as? String } ?? []
-            fetchUserProfiles(for: fromIDs) { previews in
-                DispatchQueue.main.async {
-                    incomingLikes = previews.map {
-                        Like(
-                            id: $0.id,
-                            toID: $0.id,
-                            toName: $0.name,
-                            photos: $0.photos,
-                            profileDetails: $0.details
-                        )
+        CKContainer.default().publicCloudDatabase.fetch(withQuery: query, inZoneWith: nil, desiredKeys: nil, resultsLimit: CKQueryOperation.maximumResults) { result in
+            switch result {
+            case .success(let data):
+                let records = data.matchResults.compactMap { (_, recordResult) -> CKRecord? in
+                    try? recordResult.get()
+                }
+                let fromIDs = records.compactMap { $0["fromUser"] as? String }
+                fetchUserProfiles(for: fromIDs) { previews in
+                    DispatchQueue.main.async {
+                        self.incomingLikes = previews.map {
+                            Like(
+                                id: $0.id,
+                                toID: $0.id,
+                                toName: $0.name,
+                                photos: $0.photos,
+                                profileDetails: $0.details
+                            )
+                        }
                     }
                 }
+            case .failure(let error):
+                print("Error fetching incoming likes: \(error.localizedDescription)")
             }
         }
     }
@@ -266,7 +274,14 @@ struct LikesView: View {
             }
         }
 
-        op.fetchRecordsCompletionBlock = { _, _ in
+        op.fetchRecordsResultBlock = { result in
+            switch result {
+            case .success:
+                // Overall operation succeeded, per-record results handled by perRecordResultBlock
+                break
+            case .failure(let error):
+                print("Error in CKFetchRecordsOperation: \(error.localizedDescription)")
+            }
             DispatchQueue.main.async { completion(results) }
         }
 
@@ -277,11 +292,19 @@ struct LikesView: View {
         guard let me = UserDefaults.standard.string(forKey: "appleUserIdentifier") else { return }
         let predicate = NSPredicate(format: "fromUser == %@ AND toUser == %@", fromUserID, me)
         let query = CKQuery(recordType: "Like", predicate: predicate)
-        CKContainer.default().publicCloudDatabase.perform(query, inZoneWith: nil) { recs, _ in
-            if let rec = recs?.first {
-                CKContainer.default().publicCloudDatabase.delete(withRecordID: rec.recordID) { _, _ in
-                    blockReLike(fromUserID: fromUserID)
+        CKContainer.default().publicCloudDatabase.fetch(withQuery: query, inZoneWith: nil, desiredKeys: nil, resultsLimit: CKQueryOperation.maximumResults) { result in
+            switch result {
+            case .success(let data):
+                let recs = data.matchResults.compactMap { (_, recordResult) -> CKRecord? in
+                    try? recordResult.get()
                 }
+                if let rec = recs.first {
+                    CKContainer.default().publicCloudDatabase.delete(withRecordID: rec.recordID) { _, _ in
+                        self.blockReLike(fromUserID: fromUserID)
+                    }
+                }
+            case .failure(let error):
+                print("Error fetching record to delete like: \(error.localizedDescription)")
             }
         }
     }

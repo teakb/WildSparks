@@ -199,46 +199,59 @@ struct MatchesView: View {
         guard let myID = UserDefaults.standard.string(forKey: "appleUserIdentifier") else { return }
 
         let likeQuery = CKQuery(recordType: "Like", predicate: NSPredicate(value: true))
-        CKContainer.default().publicCloudDatabase.perform(likeQuery, inZoneWith: nil) { recs, _ in
-            guard let recs else { return }
-
-            var sent = Set<String>()
-            var received = Set<String>()
-
-            for r in recs {
-                if let f = r["fromUser"] as? String, let t = r["toUser"] as? String {
-                    if f == myID { sent.insert(t) }
-                    if t == myID { received.insert(f) }
+        CKContainer.default().publicCloudDatabase.fetch(withQuery: likeQuery, inZoneWith: nil, desiredKeys: nil, resultsLimit: CKQueryOperation.maximumResults) { result in
+            switch result {
+            case .success(let data):
+                let recs = data.matchResults.compactMap { (_, recordResult) -> CKRecord? in
+                    try? recordResult.get()
                 }
-            }
 
-            let mutual = sent.intersection(received)
-            let ids = mutual.map { CKRecord.ID(recordName: "\($0)_profile") }
-            let op = CKFetchRecordsOperation(recordIDs: ids)
-            var loaded: [Match] = []
+                var sent = Set<String>()
+                var received = Set<String>()
 
-            op.perRecordResultBlock = { rid, result in
-                if case .success(let rec) = result {
-                    let uid = rid.recordName.replacingOccurrences(of: "_profile", with: "")
-                    let name = rec["name"] as? String ?? "Unknown"
-                    var img: UIImage?
-                    if let asset = rec["photo1"] as? CKAsset,
-                       let url = asset.fileURL,
-                       let data = try? Data(contentsOf: url),
-                       let ui = UIImage(data: data) {
-                        img = ui
+                for r in recs {
+                    if let f = r["fromUser"] as? String, let t = r["toUser"] as? String {
+                        if f == myID { sent.insert(t) }
+                        if t == myID { received.insert(f) }
                     }
-                    loaded.append(Match(id: uid, name: name, image: img))
                 }
-            }
 
-            op.fetchRecordsCompletionBlock = { _, _ in
-                DispatchQueue.main.async {
-                    matches = loaded.sorted { $0.name < $1.name }
-                    matches.forEach { loadLastMessage(for: $0.id) }
+                let mutual = sent.intersection(received)
+                let ids = mutual.map { CKRecord.ID(recordName: "\($0)_profile") }
+                let op = CKFetchRecordsOperation(recordIDs: ids)
+                var loaded: [Match] = []
+
+                op.perRecordResultBlock = { rid, result in
+                    if case .success(let rec) = result {
+                        let uid = rid.recordName.replacingOccurrences(of: "_profile", with: "")
+                        let name = rec["name"] as? String ?? "Unknown"
+                        var img: UIImage?
+                        if let asset = rec["photo1"] as? CKAsset,
+                           let url = asset.fileURL,
+                           let data = try? Data(contentsOf: url),
+                           let ui = UIImage(data: data) {
+                            img = ui
+                        }
+                        loaded.append(Match(id: uid, name: name, image: img))
+                    }
                 }
+
+            op.fetchRecordsResultBlock = { result in
+                switch result {
+                case .success:
+                    print("CKFetchRecordsOperation completed successfully.")
+                case .failure(let error):
+                    print("CKFetchRecordsOperation failed with error: \(error.localizedDescription)")
+                }
+                    DispatchQueue.main.async {
+                        self.matches = loaded.sorted { $0.name < $1.name }
+                    self.matches.forEach { self.loadLastMessage(for: $0.id) }
+                    }
+                }
+                CKContainer.default().publicCloudDatabase.add(op)
+            case .failure(let error):
+                print("Error fetching likes in fetchMatches: \(error.localizedDescription)")
             }
-            CKContainer.default().publicCloudDatabase.add(op)
         }
     }
 
@@ -249,21 +262,30 @@ struct MatchesView: View {
         let query = CKQuery(recordType: "Message",
                             predicate: NSPredicate(format: "chatID == %@", chatID))
 
-        CKContainer.default().publicCloudDatabase.perform(query, inZoneWith: nil) { recs, _ in
-            guard let recs, !recs.isEmpty else { return }
-            if let latest = recs.max(by: { ($0.creationDate ?? .distantPast) < ($1.creationDate ?? .distantPast) }) {
-                let txt = latest["text"] as? String ?? ""
-                let date = latest.creationDate ?? Date()
-                let fromUser = latest["fromUser"] as? String ?? ""
-                let isMe = fromUser == myID
+        CKContainer.default().publicCloudDatabase.fetch(withQuery: query, inZoneWith: nil, desiredKeys: nil, resultsLimit: CKQueryOperation.maximumResults) { result in
+            switch result {
+            case .success(let data):
+                let recs = data.matchResults.compactMap { (_, recordResult) -> CKRecord? in
+                    try? recordResult.get()
+                }
+                guard !recs.isEmpty else { return }
 
-                DispatchQueue.main.async {
-                    previews[otherID] = .init(text: txt, date: date, fromUser: fromUser, isMe: isMe)
-                    let lastSeen = lastRead(for: chatID)
-                    if date > lastSeen && fromUser != myID {
-                        unread.insert(otherID)
+                if let latest = recs.max(by: { ($0.creationDate ?? .distantPast) < ($1.creationDate ?? .distantPast) }) {
+                    let txt = latest["text"] as? String ?? ""
+                    let date = latest.creationDate ?? Date()
+                    let fromUser = latest["fromUser"] as? String ?? ""
+                    let isMe = fromUser == myID
+
+                    DispatchQueue.main.async {
+                        self.previews[otherID] = .init(text: txt, date: date, fromUser: fromUser, isMe: isMe)
+                        let lastSeen = self.lastRead(for: chatID)
+                        if date > lastSeen && fromUser != myID {
+                            self.unread.insert(otherID)
+                        }
                     }
                 }
+            case .failure(let error):
+                print("Error loading last message for \(otherID): \(error.localizedDescription)")
             }
         }
     }
@@ -369,7 +391,7 @@ struct ChatView: View {
                         }
                     }
                 }
-                .onChange(of: scrollToBottom) { _ in
+                .onChange(of: scrollToBottom) {
                     if let last = messages.last {
                         withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
                     }
@@ -405,23 +427,31 @@ struct ChatView: View {
         let chatID = getChatID(userID: userID, otherUserID: matchID)
         let query = CKQuery(recordType: "Message", predicate: NSPredicate(format: "chatID == %@", chatID))
 
-        CKContainer.default().publicCloudDatabase.perform(query, inZoneWith: nil) { records, error in
-            if let error = error {
-                print("❌ Failed to load messages: \(error.localizedDescription)")
-                return
-            }
-            let sorted = (records ?? []).sorted {
-                ($0.creationDate ?? .distantPast) < ($1.creationDate ?? .distantPast)
-            }
-            DispatchQueue.main.async {
-                messages = sorted.map { record in
-                    let text = record["text"] as? String ?? ""
-                    let from = record["fromUser"] as? String ?? ""
-                    let isMe = from == UserDefaults.standard.string(forKey: "appleUserIdentifier")
-                    let date = record.creationDate ?? Date()
-                    return Message(id: record.recordID.recordName, text: text, isMe: isMe, timestamp: date)
+        CKContainer.default().publicCloudDatabase.fetch(withQuery: query, inZoneWith: nil, desiredKeys: nil, resultsLimit: CKQueryOperation.maximumResults) { result in
+            switch result {
+            case .success(let data):
+                let records = data.matchResults.compactMap { (_, recordResult) -> CKRecord? in
+                    try? recordResult.get()
                 }
-                scrollToBottom.toggle()
+                // --- Start of original logic that used 'records' ---
+                let sorted = records.sorted { // 'records' is no longer optional here
+                    ($0.creationDate ?? .distantPast) < ($1.creationDate ?? .distantPast)
+                }
+                DispatchQueue.main.async {
+                    self.messages = sorted.map { record_iterator_var in // renamed 'record' to avoid conflict with outer scope if any
+                        let text = record_iterator_var["text"] as? String ?? ""
+                        let from = record_iterator_var["fromUser"] as? String ?? ""
+                        let isMe = from == UserDefaults.standard.string(forKey: "appleUserIdentifier")
+                        let date = record_iterator_var.creationDate ?? Date()
+                        return Message(id: record_iterator_var.recordID.recordName, text: text, isMe: isMe, timestamp: date)
+                    }
+                    self.scrollToBottom.toggle()
+                }
+                // --- End of original logic ---
+            case .failure(let error):
+                // Original code had: if let error = error { print("❌ Failed to load messages: \(error.localizedDescription)"); return }
+                print("❌ Failed to load messages in ChatView: \(error.localizedDescription)")
+                // The original 'return' is implicit in the case block.
             }
         }
     }

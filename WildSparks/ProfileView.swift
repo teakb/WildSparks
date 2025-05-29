@@ -298,7 +298,7 @@ struct ProfileView: View {
                       selection: $selectedItems,
                       maxSelectionCount: 6 - images.count,
                       matching: .images)
-        .onChange(of: selectedItems, perform: handlePhotoSelection)
+        .onChange(of: selectedItems) { _, newValue in handlePhotoSelection(newValue) }
     }
 
     private func basicInfoSection() -> some View {
@@ -428,8 +428,8 @@ struct ProfileView: View {
                     }
                     .frame(maxWidth: .infinity)
                 }
-                .onChange(of: feet) { _ in profile.height = "\(feet) ft \(inches) in" }
-                .onChange(of: inches) { _ in profile.height = "\(feet) ft \(inches) in" }
+                .onChange(of: feet) { profile.height = "\(feet) ft \(inches) in" }
+                .onChange(of: inches) { profile.height = "\(feet) ft \(inches) in" }
                 VisibilityPicker(fieldName: "height", selection: Binding(
                     get: { profile.fieldVisibilities["height"] ?? .everyone },
                     set: { profile.fieldVisibilities["height"] = $0 }
@@ -967,8 +967,8 @@ struct ProfileView: View {
             .pickerStyle(MenuPickerStyle())
             .disabled(!isEditing)
         }
-        .onChange(of: feet) { _ in profile.height = "\(feet) ft \(inches) in" }
-        .onChange(of: inches) { _ in profile.height = "\(feet) ft \(inches) in" }
+        .onChange(of: feet) { profile.height = "\(feet) ft \(inches) in" }
+        .onChange(of: inches) { profile.height = "\(feet) ft \(inches) in" }
     }
 
     private func handlePhotoSelection(_ items: [PhotosPickerItem]) {

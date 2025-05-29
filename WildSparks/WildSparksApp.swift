@@ -33,7 +33,7 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         UNUserNotificationCenter.current().delegate = self
         
         // Clear badge on launch
-        UIApplication.shared.applicationIconBadgeNumber = 0
+        UNUserNotificationCenter.current().setBadgeCount(0, withCompletionHandler: nil)
         
         return true
     }
@@ -78,34 +78,46 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         print("🧠 Checking for match for user: \(myID)")
 
         let likesFromMeQuery = CKQuery(recordType: "Like", predicate: NSPredicate(format: "fromUser == %@", myID))
-        CKContainer.default().publicCloudDatabase.perform(likesFromMeQuery, inZoneWith: nil) { sentRecords, _ in
-            let likedUserIDs = Set(sentRecords?.compactMap { $0["toUser"] as? String } ?? [])
-            print("📤 Liked users: \(likedUserIDs)")
-
-            let likesToMeQuery = CKQuery(recordType: "Like", predicate: NSPredicate(format: "toUser == %@", myID))
-            CKContainer.default().publicCloudDatabase.perform(likesToMeQuery, inZoneWith: nil) { receivedRecords, _ in
-                guard let received = receivedRecords else {
-                    print("❌ No likes received")
-                    return
+        CKContainer.default().publicCloudDatabase.fetch(withQuery: likesFromMeQuery, inZoneWith: nil, desiredKeys: nil, resultsLimit: CKQueryOperation.maximumResults) { result in
+            switch result {
+            case .success(let data):
+                let sentRecordsResults = data.matchResults.compactMap { (_, recordResult) -> CKRecord? in
+                    try? recordResult.get()
                 }
+                let likedUserIDs = Set(sentRecordsResults.compactMap { $0["toUser"] as? String })
+                print("📤 Liked users: \(likedUserIDs)")
 
-                for record in received {
-                    if let fromUser = record["fromUser"] as? String {
-                        print("📥 Received like from: \(fromUser)")
-                        if likedUserIDs.contains(fromUser) {
-                            print("🎉 MUTUAL MATCH FOUND with \(fromUser)")
-
-                            let content = UNMutableNotificationContent()
-                            content.title = "🔥 It's a Match!"
-                            content.body = "You and someone like each other!"
-                            content.sound = .default
-
-                            let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-                            UNUserNotificationCenter.current().add(request)
-                            break
+                let likesToMeQuery = CKQuery(recordType: "Like", predicate: NSPredicate(format: "toUser == %@", myID))
+                CKContainer.default().publicCloudDatabase.fetch(withQuery: likesToMeQuery, inZoneWith: nil, desiredKeys: nil, resultsLimit: CKQueryOperation.maximumResults) { result in
+                    switch result {
+                    case .success(let data):
+                        let receivedRecords = data.matchResults.compactMap { (_, recordResult) -> CKRecord? in
+                            try? recordResult.get()
                         }
+
+                        for record in receivedRecords {
+                            if let fromUser = record["fromUser"] as? String {
+                                print("📥 Received like from: \(fromUser)")
+                                if likedUserIDs.contains(fromUser) {
+                                    print("🎉 MUTUAL MATCH FOUND with \(fromUser)")
+
+                                    let content = UNMutableNotificationContent()
+                                    content.title = "🔥 It's a Match!"
+                                    content.body = "You and someone like each other!"
+                                    content.sound = .default
+
+                                    let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+                                    UNUserNotificationCenter.current().add(request)
+                                    break
+                                }
+                            }
+                        }
+                    case .failure(let error):
+                        print("❌ Error fetching likes to me: \(error.localizedDescription)")
                     }
                 }
+            case .failure(let error):
+                print("❌ Error fetching likes from me: \(error.localizedDescription)")
             }
         }
     }
@@ -117,33 +129,47 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         let predicate = NSPredicate(format: "fromUser == %@", userID)
         let query = CKQuery(recordType: "Like", predicate: predicate)
 
-        CKContainer.default().publicCloudDatabase.perform(query, inZoneWith: nil) { myLikes, error in
-            guard let myLikes = myLikes else { return }
+        CKContainer.default().publicCloudDatabase.fetch(withQuery: query, inZoneWith: nil, desiredKeys: nil, resultsLimit: CKQueryOperation.maximumResults) { result in
+            switch result {
+            case .success(let data):
+                let myLikesResults = data.matchResults.compactMap { (_, recordResult) -> CKRecord? in
+                    try? recordResult.get()
+                }
+                let likedUserIDs = Set(myLikesResults.compactMap { $0["toUser"] as? String })
 
-            let likedUserIDs = Set(myLikes.compactMap { $0["toUser"] as? String })
+                // Now fetch all likes *to you*
+                let reversePredicate = NSPredicate(format: "toUser == %@", userID)
+                let reverseQuery = CKQuery(recordType: "Like", predicate: reversePredicate)
 
-            // Now fetch all likes *to you*
-            let reversePredicate = NSPredicate(format: "toUser == %@", userID)
-            let reverseQuery = CKQuery(recordType: "Like", predicate: reversePredicate)
+                CKContainer.default().publicCloudDatabase.fetch(withQuery: reverseQuery, inZoneWith: nil, desiredKeys: nil, resultsLimit: CKQueryOperation.maximumResults) { result in
+                    switch result {
+                    case .success(let data):
+                        let likesToMeResults = data.matchResults.compactMap { (_, recordResult) -> CKRecord? in
+                            try? recordResult.get()
+                        }
+                        for record in likesToMeResults {
+                            if let likerID = record["fromUser"] as? String, likedUserIDs.contains(likerID) {
+                                // 🔥 Mutual match detected
+                                let content = UNMutableNotificationContent()
+                                content.title = "🔥 It's a Match!"
+                                content.body = "You and someone like each other!"
+                                content.sound = .default
 
-            CKContainer.default().publicCloudDatabase.perform(reverseQuery, inZoneWith: nil) { likesToMe, error in
-                guard let likesToMe = likesToMe else { return }
+                                let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+                                UNUserNotificationCenter.current().add(request)
+                                UNUserNotificationCenter.current().setBadgeCount(0, withCompletionHandler: nil)
 
-                for record in likesToMe {
-                    if let likerID = record["fromUser"] as? String, likedUserIDs.contains(likerID) {
-                        // 🔥 Mutual match detected
-                        let content = UNMutableNotificationContent()
-                        content.title = "🔥 It's a Match!"
-                        content.body = "You and someone like each other!"
-                        content.sound = .default
-
-                        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-                        UNUserNotificationCenter.current().add(request)
-                        UIApplication.shared.applicationIconBadgeNumber = 0
-
-                        break
+                                break
+                            }
+                        }
+                    case .failure(let error):
+                        print("❌ Error fetching likes to me: \(error.localizedDescription)")
+                        // Consider if a return is needed here or if the flow can continue
                     }
                 }
+            case .failure(let error):
+                print("❌ Error fetching my likes: \(error.localizedDescription)")
+                return // Exit if fetching own likes fails
             }
         }
     }
@@ -153,6 +179,6 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
 class SceneDelegate: NSObject, UIWindowSceneDelegate {
     func sceneDidBecomeActive(_ scene: UIScene) {
         // Clear badge when app becomes active
-        UIApplication.shared.applicationIconBadgeNumber = 0
+        UNUserNotificationCenter.current().setBadgeCount(0, withCompletionHandler: nil)
     }
 }

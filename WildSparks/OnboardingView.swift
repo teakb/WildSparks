@@ -162,7 +162,7 @@ class SignInWithAppleManager: NSObject, ASAuthorizationControllerDelegate {
             let publicDB = CKContainer.default().publicCloudDatabase
             
             publicDB.fetch(withRecordID: recordID) { fetchedRecord, error in
-                if let fetchedRecord = fetchedRecord {
+                if fetchedRecord != nil {
                     // Record already exists
                     print("User record for \(userIdentifier) already exists, no need to save.")
                     // Optionally, update existing record if new data is available and different

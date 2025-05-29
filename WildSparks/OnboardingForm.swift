@@ -430,8 +430,8 @@ struct OnboardingForm: View {
                     }
                     .frame(maxWidth: .infinity)
                 }
-                .onChange(of: feet) { _ in updateHeight() }
-                .onChange(of: inches) { _ in updateHeight() }
+                .onChange(of: feet) { updateHeight() }
+                .onChange(of: inches) { updateHeight() }
                 VisibilityPicker(fieldName: "height", selection: Binding(
                     get: { profile.fieldVisibilities["height"] ?? .everyone },
                     set: { profile.fieldVisibilities["height"] = $0 }
@@ -1013,7 +1013,7 @@ struct OnboardingForm: View {
                             .foregroundColor(.white)
                             .cornerRadius(10)
                     }
-                    .onChange(of: selectedItems) { newItems in
+                    .onChange(of: selectedItems) { _, newItems in
                         for item in newItems {
                             item.loadTransferable(type: Data.self) { result in
                                 switch result {
