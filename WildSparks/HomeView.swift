@@ -487,7 +487,7 @@ struct HomeView: View {
                                 Text("Enable location to find sparks near you")
                                     .multilineTextAlignment(.center)
                                 Button("Allow Access") {
-                                    requestLocationPermission()
+                                    Task { await requestLocationPermission() }
                                 }
                                 .buttonStyle(.borderedProminent)
                             }
@@ -568,17 +568,15 @@ struct HomeView: View {
                     Spacer()
                 }
                 .onAppear {
-                    checkLocationAndFetch()
+                    Task { await checkLocationAndFetch() }
                     requestPushPermission()
                     subscribeToNewMessages()
                     subscribeToNewLikes()
                     loadProfile()
                 }
-                .onChange(of: locationManager.currentLocation) { _ in
-                    fetchNearbyUsers()
-                }
-                .onChange(of: storeManager.isSubscribed) { isSubscribed in
-                    if !isSubscribed {
+                .onChange(of: locationManager.currentLocation) { Task { await fetchNearbyUsers() } }
+                .onChange(of: storeManager.isSubscribed) { oldValue, newValue in
+                    if !newValue {
                         selectedRadius = minRadius
                         // Reset premium filters
                         minHeightFeet = 3
@@ -596,7 +594,7 @@ struct HomeView: View {
                         preferredRelationshipType = []
                         preferredExerciseHabits = []
                         preferredInterests = []
-                        fetchNearbyUsers()
+                        Task { await fetchNearbyUsers() }
                     }
                 }
 
@@ -614,9 +612,7 @@ struct HomeView: View {
                         } maximumValueLabel: {
                             Text("50mi")
                         }
-                        .onChange(of: selectedRadius) { _ in
-                            fetchNearbyUsers()
-                        }
+                         .onChange(of: selectedRadius) { Task { await fetchNearbyUsers() } }
                         Text("\(formattedDistance(from: selectedRadius))")
                         Button("Done") {
                             showingRadiusPopup = false
@@ -665,7 +661,7 @@ struct HomeView: View {
                         Button("Done") {
                             showingAgePopup = false
                             saveBracketPreferences()
-                            fetchNearbyUsers()
+                            Task { await fetchNearbyUsers() }
                         }
                         .buttonStyle(.borderedProminent)
                     }
@@ -697,7 +693,7 @@ struct HomeView: View {
                         Button("Done") {
                             showingEthnicityPopup = false
                             saveBracketPreferences()
-                            fetchNearbyUsers()
+                            Task { await fetchNearbyUsers() }
                         }
                         .buttonStyle(.borderedProminent)
                     }
@@ -749,7 +745,7 @@ struct HomeView: View {
                         Button("Done") {
                             showingHeightPopup = false
                             saveBracketPreferences()
-                            fetchNearbyUsers()
+                            Task { await fetchNearbyUsers() }
                         }
                         .buttonStyle(.borderedProminent)
                     }
@@ -781,7 +777,7 @@ struct HomeView: View {
                         Button("Done") {
                             showingReligionPopup = false
                             saveBracketPreferences()
-                            fetchNearbyUsers()
+                            Task { await fetchNearbyUsers() }
                         }
                         .buttonStyle(.borderedProminent)
                     }
@@ -804,7 +800,7 @@ struct HomeView: View {
                         Button("Done") {
                             showingHasChildrenPopup = false
                             saveBracketPreferences()
-                            fetchNearbyUsers()
+                            Task { await fetchNearbyUsers() }
                         }
                         .buttonStyle(.borderedProminent)
                     }
@@ -827,7 +823,7 @@ struct HomeView: View {
                         Button("Done") {
                             showingSmokesWeedPopup = false
                             saveBracketPreferences()
-                            fetchNearbyUsers()
+                            Task { await fetchNearbyUsers() }
                         }
                         .buttonStyle(.borderedProminent)
                     }
@@ -850,7 +846,7 @@ struct HomeView: View {
                         Button("Done") {
                             showingUsesDrugsPopup = false
                             saveBracketPreferences()
-                            fetchNearbyUsers()
+                            Task { await fetchNearbyUsers() }
                         }
                         .buttonStyle(.borderedProminent)
                     }
@@ -873,7 +869,7 @@ struct HomeView: View {
                         Button("Done") {
                             showingDrinksPopup = false
                             saveBracketPreferences()
-                            fetchNearbyUsers()
+                            Task { await fetchNearbyUsers() }
                         }
                         .buttonStyle(.borderedProminent)
                     }
@@ -896,7 +892,7 @@ struct HomeView: View {
                         Button("Done") {
                             showingSmokesPopup = false
                             saveBracketPreferences()
-                            fetchNearbyUsers()
+                            Task { await fetchNearbyUsers() }
                         }
                         .buttonStyle(.borderedProminent)
                     }
@@ -928,7 +924,7 @@ struct HomeView: View {
                         Button("Done") {
                             showingPoliticalViewPopup = false
                             saveBracketPreferences()
-                            fetchNearbyUsers()
+                            Task { await fetchNearbyUsers() }
                         }
                         .buttonStyle(.borderedProminent)
                     }
@@ -960,7 +956,7 @@ struct HomeView: View {
                         Button("Done") {
                             showingDatingIntentionsPopup = false
                             saveBracketPreferences()
-                            fetchNearbyUsers()
+                            Task { await fetchNearbyUsers() }
                         }
                         .buttonStyle(.borderedProminent)
                     }
@@ -992,7 +988,7 @@ struct HomeView: View {
                         Button("Done") {
                             showingRelationshipTypePopup = false
                             saveBracketPreferences()
-                            fetchNearbyUsers()
+                            Task { await fetchNearbyUsers() }
                         }
                         .buttonStyle(.borderedProminent)
                     }
@@ -1024,7 +1020,7 @@ struct HomeView: View {
                         Button("Done") {
                             showingExerciseHabitsPopup = false
                             saveBracketPreferences()
-                            fetchNearbyUsers()
+                            Task { await fetchNearbyUsers() }
                         }
                         .buttonStyle(.borderedProminent)
                     }
@@ -1056,7 +1052,7 @@ struct HomeView: View {
                         Button("Done") {
                             showingInterestsPopup = false
                             saveBracketPreferences()
-                            fetchNearbyUsers()
+                            Task { await fetchNearbyUsers() }
                         }
                         .buttonStyle(.borderedProminent)
                     }
@@ -1136,34 +1132,46 @@ struct HomeView: View {
         return String(format: "%.1fmi", miles)
     }
 
-    func fetchNearbyUsers() {
+    func fetchNearbyUsers() async {
         guard let currentLocation = locationManager.currentLocation else { return }
         let locationQuery = CKQuery(recordType: "UserLocation", predicate: NSPredicate(value: true))
-        CKContainer.default().publicCloudDatabase.perform(locationQuery, inZoneWith: nil) { locationRecords, _ in
-            guard let locationRecords = locationRecords else { return }
-
-            let nearbyUserIDs = locationRecords.compactMap { record -> String? in
-                guard let loc = record["location"] as? CLLocation,
-                      let userID = record["userID"] as? String else { return nil }
-                return currentLocation.distance(from: loc) <= selectedRadius ? userID : nil
+        
+        let locationRecords: [CKRecord]
+        do {
+            let response = try await CKContainer.default().publicCloudDatabase.records(matching: locationQuery, resultsLimit: CKQueryOperation.maximumResults)
+            locationRecords = response.matchResults.compactMap { _, result in try? result.get() }
+        } catch {
+            print("Error fetching location records: \(error.localizedDescription)")
+            DispatchQueue.main.async {
+                self.nearbyUsers = []
             }
-            let references = nearbyUserIDs.map {
-                CKRecord.Reference(recordID: CKRecord.ID(recordName: "\($0)_location"), action: .none)
-            }
+            return // Exit if fetching locations failed
+        }
 
-            let profileQuery = CKQuery(recordType: "UserProfile",
-                                       predicate: NSPredicate(format: "userReference IN %@", references))
-            CKContainer.default().publicCloudDatabase.perform(profileQuery, inZoneWith: nil) { profileRecords, _ in
-                guard let profileRecords = profileRecords else { return }
+        let nearbyUserIDs = locationRecords.compactMap { record -> String? in
+            guard let loc = record["location"] as? CLLocation,
+                  let userID = record["userID"] as? String else { return nil }
+            return currentLocation.distance(from: loc) <= selectedRadius ? userID : nil
+        }
+        let references = nearbyUserIDs.map {
+            CKRecord.Reference(recordID: CKRecord.ID(recordName: "\($0)_location"), action: .none)
+        }
 
-                var results: [NearbyUser] = []
-                for rec in profileRecords {
+        let profileQuery = CKQuery(recordType: "UserProfile",
+                                   predicate: NSPredicate(format: "userReference IN %@", references))
+        // Reading storeManager.isSubscribed before any await call in this scope
+        let isSubscribed = self.storeManager.isSubscribed
+        do {
+            let profileResponse = try await CKContainer.default().publicCloudDatabase.records(matching: profileQuery, resultsLimit: CKQueryOperation.maximumResults)
+            let profileRecords = profileResponse.matchResults.compactMap { _, result_val in try? result_val.get() }
+            var results: [NearbyUser] = []
+            for rec in profileRecords {
                     guard let ref = rec["userReference"] as? CKRecord.Reference else { continue }
                     let id = ref.recordID.recordName
                     let name = rec["name"] as? String ?? "Unknown"
 
                     // Apply premium filters
-                    if storeManager.isSubscribed {
+                    if isSubscribed {
                         // Height filter (min-max)
                         if let userHeight = rec["height"] as? String,
                            let inches = heightToInches(userHeight) {
@@ -1290,8 +1298,13 @@ struct HomeView: View {
                 DispatchQueue.main.async {
                     nearbyUsers = results
                 }
+            } catch {
+                print("Error fetching profile records: \(error.localizedDescription)")
+                DispatchQueue.main.async {
+                    self.nearbyUsers = []
+                }
             }
-        }
+        // Removed the outer catch for location records as it's handled above
     }
 
     // Convert height string (e.g., "5 ft 6 in") to inches
@@ -1305,22 +1318,26 @@ struct HomeView: View {
         return nil
     }
 
-    func checkLocationAndFetch() {
+    func checkLocationAndFetch() async {
         switch locationManager.locationManager.authorizationStatus {
         case .notDetermined:
-            requestLocationPermission()
+            await requestLocationPermission()
         case .restricted:
-            requestLocationPermission()
+            await requestLocationPermission()
         case .denied:
-            requestLocationPermission()
+            await requestLocationPermission()
         case .authorizedWhenInUse:
-            fetchNearbyUsers()
+            await fetchNearbyUsers()
         case .authorizedAlways:
-            fetchNearbyUsers()
+            await fetchNearbyUsers()
+        @unknown default:
+            // Handle potential future cases
+            print("Unknown authorization status: \(locationManager.locationManager.authorizationStatus)")
+            await requestLocationPermission() // Or some other default action
         }
     }
 
-    func requestLocationPermission() {
+    func requestLocationPermission() async {
         switch locationManager.locationManager.authorizationStatus {
         case .notDetermined:
             locationManager.locationManager.requestWhenInUseAuthorization()
@@ -1329,9 +1346,14 @@ struct HomeView: View {
         case .denied:
             showingLocationPrompt = true
         case .authorizedWhenInUse:
-            fetchNearbyUsers()
+            await fetchNearbyUsers()
         case .authorizedAlways:
-            fetchNearbyUsers()
+            await fetchNearbyUsers()
+        @unknown default:
+            // Handle potential future cases
+            print("Unknown authorization status during permission request: \(locationManager.locationManager.authorizationStatus)")
+            // Potentially show a generic error or prompt
+            showingLocationPrompt = true
         }
     }
 

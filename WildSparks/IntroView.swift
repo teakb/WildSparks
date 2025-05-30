@@ -4,7 +4,7 @@ struct IntroView: View {
     @State private var navigateToHome = false
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             VStack {
                 Text("Welcome to WildSparks")
                     .font(.largeTitle)
@@ -24,12 +24,9 @@ struct IntroView: View {
 //what da fuck
                 
                 // Navigation link to HomeView
-                NavigationLink(
-                    destination: ContentView(),
-                    isActive: $navigateToHome
-                ) {
-                    EmptyView()
-                }
+            }
+            .navigationDestination(isPresented: $navigateToHome) {
+                ContentView()
             }
         }
     }
