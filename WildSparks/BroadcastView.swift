@@ -166,7 +166,7 @@ struct CustomMapView: UIViewRepresentable {
             let incomingRegion = mapView.region
             let currentParentRegion = self.parent.region
 
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 if let programmaticTimestamp = self.lastProgrammaticRegionChangeTimestamp {
                     let timeSinceProgrammaticChange = Date().timeIntervalSince(programmaticTimestamp)
                     if timeSinceProgrammaticChange < self.programmaticRegionChangeIgnoreInterval {
@@ -244,7 +244,7 @@ struct PlaceSearchView: View {
                 HStack {
                     TextField("Search for a place", text: $viewModel.searchQuery)
                         .textFieldStyle(.roundedBorder)
-                        .onChange(of: viewModel.searchQuery) { _ in
+                        .onChange(of: viewModel.searchQuery) { _, _ in
                             viewModel.search()
                         }
                     Button(action: {
@@ -290,26 +290,22 @@ struct PlaceSearchView: View {
                 let search = MKLocalSearch(request: request)
                 let response = try await search.start()
                 if let mapItem = response.mapItems.first {
-                    let coordinate = mapItem.placemark.coordinate // Directly access coordinate
-                    DispatchQueue.main.async {
+                    let coordinate = mapItem.placemark.coordinate
+                    await MainActor.run {
                         self.selectedPlaceName = mapItem.name ?? completion.title
-                        self.selectedPlaceCoordinate = coordinate // Assign the non-optional coordinate
+                        self.selectedPlaceCoordinate = coordinate
                         dismiss()
                     }
                 } else {
-                    // This 'else' corresponds to 'if let mapItem = response.mapItems.first' failing
-                    DispatchQueue.main.async {
+                    await MainActor.run {
                         self.errorMessage = "Could not retrieve details for the selected place. Please try another."
                         self.showingErrorAlert = true
-                        // Do not dismiss, do not update bindings
                     }
                 }
             } catch {
-                // Error during MKLocalSearch
-                DispatchQueue.main.async {
+                await MainActor.run {
                     self.errorMessage = "An error occurred while searching for the place: \(error.localizedDescription)"
                     self.showingErrorAlert = true
-                    // Do not dismiss, do not update bindings
                 }
             }
         }
@@ -408,7 +404,7 @@ struct MessagePromptView: View {
     // Removed containsBannedWord()
 }
 
-typealias MainAsyncAfterType = (TimeInterval, @escaping () -> Void) -> Void
+typealias MainAsyncAfterType = (TimeInterval, @Sendable @escaping () -> Void) -> Void
 
 // MARK: - BroadcastView Content ViewModel
 extension BroadcastView {
@@ -545,7 +541,7 @@ extension BroadcastView {
                     return
                 }
                 guard let rec = record else { return }
-                DispatchQueue.main.async {
+                Task { @MainActor in
                     if let ageRangeStr = rec["preferredAgeRange"] as? String {
                         let parts = ageRangeStr.split(separator: "-").compactMap { Int($0) }
                         if parts.count == 2 { self.profile.preferredAgeRange = parts[0]...parts[1] }
@@ -553,7 +549,7 @@ extension BroadcastView {
                     if let ethStr = rec["preferredEthnicities"] as? String {
                         self.profile.preferredEthnicities = ethStr.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
                     }
-                    if let rad = rec["preferredRadius"] as? Double { // Changed to Double
+                    if let rad = rec["preferredRadius"] as? Double {
                         let maxAllowedRadius = self.storeManager.isSubscribed ? self.maxRadiusSubscribed : self.maxRadiusNonSubscribed
                         self.selectedRadius = min(max(rad, self.minRadius), maxAllowedRadius)
                     } else {
@@ -568,13 +564,15 @@ extension BroadcastView {
             let recID = CKRecord.ID(recordName: "\(uid)_profile")
             database.fetch(withRecordID: recID) { [weak self] (record: CKRecord?, error: Error?) in
                 guard let self = self else { return }
-                var profileRecord: CKRecord
-                if let rec = record { profileRecord = rec }
-                else { profileRecord = CKRecord(recordType: "UserProfile", recordID: recID) } // Create if not exists
+                Task { @MainActor in
+                    var profileRecord: CKRecord
+                    if let rec = record { profileRecord = rec }
+                    else { profileRecord = CKRecord(recordType: "UserProfile", recordID: recID) } // Create if not exists
 
-                profileRecord["preferredRadius"] = NSNumber(value: self.selectedRadius) // Ensure it's NSNumber
-                self.database.save(profileRecord) { (savedRecord: CKRecord?, saveError: Error?) in
-                    if let saveError = saveError { print("Error saving radius: \(saveError.localizedDescription)") }
+                    profileRecord["preferredRadius"] = NSNumber(value: self.selectedRadius) // Ensure it's NSNumber
+                    self.database.save(profileRecord) { (savedRecord: CKRecord?, saveError: Error?) in
+                        if let saveError = saveError { print("Error saving radius: \(saveError.localizedDescription)") }
+                    }
                 }
             }
         }
@@ -582,16 +580,18 @@ extension BroadcastView {
         func saveBracketPreferences() {
             guard let uid = UserDefaults.standard.string(forKey: "appleUserIdentifier") else { return }
             let recID = CKRecord.ID(recordName: "\(uid)_profile")
-             database.fetch(withRecordID: recID) { [weak self] (record: CKRecord?, error: Error?) in
+            database.fetch(withRecordID: recID) { [weak self] (record: CKRecord?, error: Error?) in
                 guard let self = self else { return }
-                var profileRecord: CKRecord
-                if let rec = record { profileRecord = rec }
-                else { profileRecord = CKRecord(recordType: "UserProfile", recordID: recID) }
+                Task { @MainActor in
+                    var profileRecord: CKRecord
+                    if let rec = record { profileRecord = rec }
+                    else { profileRecord = CKRecord(recordType: "UserProfile", recordID: recID) }
 
-                profileRecord["preferredAgeRange"] = "\(self.profile.preferredAgeRange.lowerBound)-\(self.profile.preferredAgeRange.upperBound)" as NSString
-                profileRecord["preferredEthnicities"] = self.profile.preferredEthnicities.joined(separator: ", ") as NSString
-                self.database.save(profileRecord) { (savedRecord: CKRecord?, saveError: Error?) in
-                    if let saveError = saveError { print("Error saving bracket prefs: \(saveError.localizedDescription)") }
+                    profileRecord["preferredAgeRange"] = "\(self.profile.preferredAgeRange.lowerBound)-\(self.profile.preferredAgeRange.upperBound)" as NSString
+                    profileRecord["preferredEthnicities"] = self.profile.preferredEthnicities.joined(separator: ", ") as NSString
+                    self.database.save(profileRecord) { (savedRecord: CKRecord?, saveError: Error?) in
+                        if let saveError = saveError { print("Error saving bracket prefs: \(saveError.localizedDescription)") }
+                    }
                 }
             }
         }
@@ -642,19 +642,17 @@ extension BroadcastView {
 
             database.save(newRecord) { [weak self] (savedRecord: CKRecord?, error: Error?) in
                 guard let self = self else { return }
-                DispatchQueue.main.async { // Ensure UI updates are on main thread
+                Task { @MainActor in
                     if let error = error {
                         print("Error saving broadcast: \(error.localizedDescription)")
-                        // Consider reverting isBroadcasting state here or showing an error to the user
-                        // self.isBroadcasting = false
-                        // self.broadcastEndTime = nil
-                        // self.timer?.invalidate()
-                        // self.countdown = ""
                     } else {
                         print("Broadcast saved successfully with message: \(messageToSave)")
-                        self.mainAsyncAfter(1.0) { // Use injected asyncAfter
-                           self.loadNearbyBroadcasts()
-                           self.loadBroadcastStatus()
+                        self.mainAsyncAfter(1.0) { [weak self] in
+                            guard let self = self else { return }
+                            Task { @MainActor in
+                                self.loadNearbyBroadcasts()
+                                self.loadBroadcastStatus()
+                            }
                         }
                         if !self.storeManager.isSubscribed {
                             UserDefaults.standard.set(Date(), forKey: "lastBroadcastDate")
@@ -680,26 +678,36 @@ extension BroadcastView {
             let qry = CKQuery(recordType: "Broadcast", predicate: pred)
             database.perform(qry, inZoneWith: nil) { [weak self] (recs: [CKRecord]?, error: Error?) in
                 guard let self = self else { return }
-                if let error = error { print("Error stopping broadcast (query): \(error.localizedDescription)"); return }
-                
-                recs?.forEach { recordToDelete in
-                    self.database.delete(withRecordID: recordToDelete.recordID) { (deletedRecordID: CKRecord.ID?, deleteError: Error?) in
-                        if let deleteError = deleteError { print("Error deleting broadcast record: \(deleteError.localizedDescription)")}
+                Task { @MainActor in
+                    if let error = error {
+                        print("Error stopping broadcast (query): \(error.localizedDescription)")
+                        return
                     }
+
+                    recs?.forEach { recordToDelete in
+                        self.database.delete(withRecordID: recordToDelete.recordID) { (deletedRecordID: CKRecord.ID?, deleteError: Error?) in
+                            if let deleteError = deleteError {
+                                print("Error deleting broadcast record: \(deleteError.localizedDescription)")
+                            }
+                        }
+                    }
+                    self.loadNearbyBroadcasts()
                 }
-                DispatchQueue.main.async { self.loadNearbyBroadcasts() }
             }
         }
 
         func startCountdown() {
             timer?.invalidate() // Ensure any existing timer is stopped
             timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-                guard let self = self, let end = self.broadcastEndTime else { return }
-                let remaining = Int(end.timeIntervalSinceNow)
-                if remaining <= 0 {
-                    self.stopBroadcast()
-                } else {
-                    self.countdown = String(format: "%02d:%02d", remaining / 60, remaining % 60)
+                guard let self = self else { return }
+                Task { @MainActor in
+                    guard let end = self.broadcastEndTime else { return }
+                    let remaining = Int(end.timeIntervalSinceNow)
+                    if remaining <= 0 {
+                        self.stopBroadcast()
+                    } else {
+                        self.countdown = String(format: "%02d:%02d", remaining / 60, remaining % 60)
+                    }
                 }
             }
         }
@@ -711,8 +719,11 @@ extension BroadcastView {
             let qry = CKQuery(recordType: "Broadcast", predicate: pred)
             database.perform(qry, inZoneWith: nil) { [weak self] (recs: [CKRecord]?, error: Error?) in
                 guard let self = self else { return }
-                DispatchQueue.main.async {
-                    if let error = error { print("Error loading broadcast status: \(error.localizedDescription)"); return }
+                Task { @MainActor in
+                    if let error = error {
+                        print("Error loading broadcast status: \(error.localizedDescription)")
+                        return
+                    }
                     if let activeRecord = recs?.first, let endTime = activeRecord["expiresAt"] as? Date, endTime > Date() {
                         self.isBroadcasting = true
                         self.broadcastEndTime = endTime
@@ -760,19 +771,21 @@ extension BroadcastView {
             }
             resetTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
                 guard let self = self else { return }
-                let remaining = Int(nextDate.timeIntervalSinceNow)
-                if remaining <= 0 {
-                    self.resetTimer?.invalidate()
-                    self.resetCountdown = ""
-                    self.loadBroadcastStatus() // Reload status as reset time has passed
-                } else if remaining >= 86400 { // More than a day
-                    let days = remaining / 86400
-                    let hours = (remaining % 86400) / 3600
-                    self.resetCountdown = "\(days)d \(hours)h"
-                } else { // Less than a day
-                    let hours = remaining / 3600
-                    let minutes = (remaining % 3600) / 60
-                    self.resetCountdown = "\(hours)h \(minutes)m"
+                Task { @MainActor in
+                    let remaining = Int(nextDate.timeIntervalSinceNow)
+                    if remaining <= 0 {
+                        self.resetTimer?.invalidate()
+                        self.resetCountdown = ""
+                        self.loadBroadcastStatus() // Reload status as reset time has passed
+                    } else if remaining >= 86400 { // More than a day
+                        let days = remaining / 86400
+                        let hours = (remaining % 86400) / 3600
+                        self.resetCountdown = "\(days)d \(hours)h"
+                    } else { // Less than a day
+                        let hours = remaining / 3600
+                        let minutes = (remaining % 3600) / 60
+                        self.resetCountdown = "\(hours)h \(minutes)m"
+                    }
                 }
             }
         }
@@ -789,28 +802,33 @@ extension BroadcastView {
             let now = Date()
             let queryPredicate = NSPredicate(format: "expiresAt > %@", now as CVarArg)
             let query = CKQuery(recordType: "Broadcast", predicate: queryPredicate)
+            // Capture preferences to avoid referencing actor-isolated state inside callbacks
+            let preferredAgeRange = self.profile.preferredAgeRange
+            let preferredEthnicities = self.profile.preferredEthnicities
+            let userSelectedRadius = self.selectedRadius
 
             database.perform(query, inZoneWith: nil) { [weak self] (records: [CKRecord]?, error: Error?) in
                 guard let self = self else { return }
-                
-                if let error = error {
-                    print("Error fetching broadcasts: \(error.localizedDescription)")
-                    self.mainAsyncAfter(2.0) { // Use injected asyncAfter
-                        self.isLoadingBroadcasts = false
-                        // self.loadNearbyBroadcasts() // Potential retry loop, be cautious
+                Task { @MainActor in
+                    if let error = error {
+                        print("Error fetching broadcasts: \(error.localizedDescription)")
+                        self.mainAsyncAfter(2.0) { [weak self] in
+                            guard let self = self else { return }
+                            Task { @MainActor in
+                                self.isLoadingBroadcasts = false
+                                // self.loadNearbyBroadcasts() // Potential retry loop, be cautious
+                            }
+                        }
+                        return
                     }
-                    return
-                }
 
-                guard let fetchedRecords = records else {
-                    DispatchQueue.main.async { self.isLoadingBroadcasts = false }
-                    return
-                }
+                    guard let fetchedRecords = records else {
+                        self.isLoadingBroadcasts = false
+                        return
+                    }
 
-                var newAnnotations: [BroadcastAnnotation] = []
-                let dispatchGroup = DispatchGroup()
-                // Using a concurrent queue for potentially parallelizable work (like profile fetches if they were network calls)
-                let processingQueue = DispatchQueue(label: "com.wildsparks.nearbyprocessing", attributes: .concurrent)
+                    var newAnnotations: [BroadcastAnnotation] = []
+                    let dispatchGroup = DispatchGroup()
 
                 for record in fetchedRecords {
                     guard let broadcastLocation = record["location"] as? CLLocation,
@@ -831,39 +849,36 @@ extension BroadcastView {
                         continue
                     }
 
-                    // Filter by current user's preferences
-                    guard self.profile.preferredAgeRange.contains(broadcastAge) else { continue }
-                    if !self.profile.preferredEthnicities.isEmpty && !self.profile.preferredEthnicities.contains(broadcastEthnicity) {
+                    // Filter by current user's preferences using captured values
+                    guard preferredAgeRange.contains(broadcastAge) else { continue }
+                    if !preferredEthnicities.isEmpty && !preferredEthnicities.contains(broadcastEthnicity) {
                         continue
                     }
 
                     // Filter by current user's selected viewable radius
                     // self.selectedRadius is already capped by subscription status elsewhere (e.g., in loadSavedPreferences, UI controls).
-                    guard distanceToBroadcast <= self.selectedRadius else { continue }
+                    guard distanceToBroadcast <= userSelectedRadius else { continue }
 
                     // Check against broadcaster's set radius
                     dispatchGroup.enter()
-                    processingQueue.async {
-                        var broadcasterSetRadius = self.minRadius // Default
-                        if let cachedRadius = self.broadcasterRadiiCache[broadcastUserID] {
-                            broadcasterSetRadius = cachedRadius
-                            if distanceToBroadcast <= broadcasterSetRadius {
-                                DispatchQueue.main.async { // Append to annotations on main thread if it's a @Published array
-                                    newAnnotations.append(BroadcastAnnotation(id: record.recordID.recordName, coordinate: broadcastLocation.coordinate, message: broadcastMessage, age: broadcastAge, ethnicity: broadcastEthnicity))
-                                }
-                            }
-                            dispatchGroup.leave()
-                        } else {
-                            let broadcasterProfileID = CKRecord.ID(recordName: "\(broadcastUserID)_profile")
-                            self.database.fetch(withRecordID: broadcasterProfileID) { (broadcasterProfileRecord: CKRecord?, fetchError: Error?) in
-                                if let profileRec = broadcasterProfileRecord, let rad = profileRec["preferredRadius"] as? Double { // Changed to Double
+                    if let cachedRadius = self.broadcasterRadiiCache[broadcastUserID] {
+                        let broadcasterSetRadius = cachedRadius
+                        if distanceToBroadcast <= broadcasterSetRadius {
+                            newAnnotations.append(BroadcastAnnotation(id: record.recordID.recordName, coordinate: broadcastLocation.coordinate, message: broadcastMessage, age: broadcastAge, ethnicity: broadcastEthnicity))
+                        }
+                        dispatchGroup.leave()
+                    } else {
+                        let broadcasterProfileID = CKRecord.ID(recordName: "\(broadcastUserID)_profile")
+                        self.database.fetch(withRecordID: broadcasterProfileID) { [weak self] (broadcasterProfileRecord: CKRecord?, fetchError: Error?) in
+                            Task { @MainActor in
+                                guard let self = self else { dispatchGroup.leave(); return }
+                                var broadcasterSetRadius = self.minRadius
+                                if let profileRec = broadcasterProfileRecord, let rad = profileRec["preferredRadius"] as? Double {
                                     broadcasterSetRadius = rad
-                                    DispatchQueue.main.async { self.broadcasterRadiiCache[broadcastUserID] = broadcasterSetRadius }
+                                    self.broadcasterRadiiCache[broadcastUserID] = broadcasterSetRadius
                                 }
                                 if distanceToBroadcast <= broadcasterSetRadius {
-                                     DispatchQueue.main.async {
-                                        newAnnotations.append(BroadcastAnnotation(id: record.recordID.recordName, coordinate: broadcastLocation.coordinate, message: broadcastMessage, age: broadcastAge, ethnicity: broadcastEthnicity))
-                                     }
+                                    newAnnotations.append(BroadcastAnnotation(id: record.recordID.recordName, coordinate: broadcastLocation.coordinate, message: broadcastMessage, age: broadcastAge, ethnicity: broadcastEthnicity))
                                 }
                                 dispatchGroup.leave()
                             }
@@ -872,11 +887,14 @@ extension BroadcastView {
                 }
 
                 dispatchGroup.notify(queue: .main) {
-                    self.broadcastAnnotations = newAnnotations
-                    self.isLoadingBroadcasts = false
-                    self.lastLoadedLocation = currentUserLocation // Update last loaded location
+                    Task { @MainActor in
+                        self.broadcastAnnotations = newAnnotations
+                        self.isLoadingBroadcasts = false
+                        self.lastLoadedLocation = currentUserLocation // Update last loaded location
+                    }
                 }
             }
+        }
         }
         
         func containsBannedWord(message: String) -> Bool {
@@ -896,12 +914,19 @@ extension BroadcastView {
             rec["ethnicity"] = "Other" as NSString
             rec["radius"] = NSNumber(value: maxRadiusSubscribed)
 
+            let schedule = self.mainAsyncAfter
             database.save(rec) { [weak self] (savedRecord: CKRecord?, error: Error?) in
                 guard let self = self else { return }
-                if error != nil { print("Error simulating broadcast: \(error!.localizedDescription)") }
-                else {
+                if let error {
+                    print("Error simulating broadcast: \(error.localizedDescription)")
+                } else {
                     print("Simulated broadcast saved.")
-                    self.mainAsyncAfter(1.0) { self.loadNearbyBroadcasts() }
+                    schedule(1.0) { [weak self] in
+                        guard let self = self else { return }
+                        Task { @MainActor in
+                            self.loadNearbyBroadcasts()
+                        }
+                    }
                 }
             }
             // Do not automatically center on simulated broadcast for this refactor
@@ -910,6 +935,8 @@ extension BroadcastView {
         }
     }
 }
+
+// Close the BroadcastView extension
 
 
 // MARK: - Broadcast View
@@ -1127,7 +1154,7 @@ struct BroadcastView: View {
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
             content.onReceiveWillEnterForeground() // Use content's method
         }
-        .onChange(of: storeManager.isSubscribed) { newIsSubscribedValue in // Monitor storeManager directly
+        .onChange(of: storeManager.isSubscribed) { _, newIsSubscribedValue in // Monitor storeManager directly
             content.onChangeOfSubscription(isSubscribed: newIsSubscribedValue) // Use content's method
         }
         .navigationTitle("Broadcast")
@@ -1206,7 +1233,7 @@ struct BroadcastView: View {
                     Slider(value: $content.selectedRadius, in: content.minRadiusPublic...content.maxRadiusSubscribedPublic, step: 10) { // Assuming public getters in Content
                         Text("Radius")
                     } minimumValueLabel: { Text("10mi") } maximumValueLabel: { Text("50mi") }
-                    .onChange(of: content.selectedRadius) { _ in
+                    .onChange(of: content.selectedRadius) { _, _ in
                         content.saveRadiusToCloudKit()
                         content.loadNearbyBroadcasts()
                     }
@@ -1283,21 +1310,15 @@ extension BroadcastView.Content {
                 
                 // print("[COMBINE SUB - Initial Center] Received newLocation: \(newLocation.coordinate.latitude), \(newLocation.coordinate.longitude). Current hasSetInitialUserRegion: \(self.hasSetInitialUserRegion)")
 
-                DispatchQueue.main.async {
+                Task { @MainActor in
                     if !self.hasSetInitialUserRegion {
                         self.region = MKCoordinateRegion(
                             center: newLocation.coordinate,
                             span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
                         )
                         self.hasSetInitialUserRegion = true
-                        // print("[COMBINE SUB - Initial Center] Region set. New region: \(self.region.center.latitude), \(self.region.center.longitude). hasSetInitialUserRegion is now: \(self.hasSetInitialUserRegion)")
-                        
-                        // print("[COMBINE SUB - Initial Center] Attempting to cancel and nil out initialCenteringSubscriber.")
                         self.initialCenteringSubscriber?.cancel()
-                        self.initialCenteringSubscriber = nil // Nil out after cancelling
-                    } else {
-                         // This case should ideally not be hit if cancellation works promptly.
-                        // print("[COMBINE SUB - Initial Center] Subscriber fired but hasSetInitialUserRegion was already true.") // Already commented
+                        self.initialCenteringSubscriber = nil
                     }
                 }
             }
@@ -1313,7 +1334,7 @@ extension BroadcastView.Content {
                 // print("[COMBINE SUB - Load Broadcasts] Received newLocation: \(newLocation.coordinate.latitude), \(newLocation.coordinate.longitude).")
 
                 // All state changes and calls that might lead to state changes for UI should be on main thread.
-                DispatchQueue.main.async {
+                Task { @MainActor in
                     var shouldLoad = false
                     // Only proceed if initial centering has happened OR if we don't care about that for loading.
                     // Generally, we want location to be somewhat stable before first load.
@@ -1336,7 +1357,6 @@ extension BroadcastView.Content {
                     } else {
                         // print("[COMBINE SUB - Load Broadcasts] Location did not change significantly. Not reloading broadcasts.")
                     }
-                     // print("[COMBINE SUB - Load Broadcasts] Finished processing. Current region: \(self.region.center.latitude), \(self.region.center.longitude).")
                 }
             }
             .store(in: &cancellables)
