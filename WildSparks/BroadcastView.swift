@@ -244,7 +244,7 @@ struct PlaceSearchView: View {
                 HStack {
                     TextField("Search for a place", text: $viewModel.searchQuery)
                         .textFieldStyle(.roundedBorder)
-                        .onChange(of: viewModel.searchQuery) { _ in
+                        .onChange(of: viewModel.searchQuery) { _, _ in
                             viewModel.search()
                         }
                     Button(action: {
@@ -408,7 +408,7 @@ struct MessagePromptView: View {
     // Removed containsBannedWord()
 }
 
-typealias MainAsyncAfterType = (TimeInterval, @escaping () -> Void) -> Void
+typealias MainAsyncAfterType = (TimeInterval, @Sendable @escaping () -> Void) -> Void
 
 // MARK: - BroadcastView Content ViewModel
 extension BroadcastView {
@@ -680,26 +680,36 @@ extension BroadcastView {
             let qry = CKQuery(recordType: "Broadcast", predicate: pred)
             database.perform(qry, inZoneWith: nil) { [weak self] (recs: [CKRecord]?, error: Error?) in
                 guard let self = self else { return }
-                if let error = error { print("Error stopping broadcast (query): \(error.localizedDescription)"); return }
-                
-                recs?.forEach { recordToDelete in
-                    self.database.delete(withRecordID: recordToDelete.recordID) { (deletedRecordID: CKRecord.ID?, deleteError: Error?) in
-                        if let deleteError = deleteError { print("Error deleting broadcast record: \(deleteError.localizedDescription)")}
+                Task { @MainActor in
+                    if let error = error {
+                        print("Error stopping broadcast (query): \(error.localizedDescription)")
+                        return
                     }
+
+                    recs?.forEach { recordToDelete in
+                        self.database.delete(withRecordID: recordToDelete.recordID) { (deletedRecordID: CKRecord.ID?, deleteError: Error?) in
+                            if let deleteError = deleteError {
+                                print("Error deleting broadcast record: \(deleteError.localizedDescription)")
+                            }
+                        }
+                    }
+                    self.loadNearbyBroadcasts()
                 }
-                DispatchQueue.main.async { self.loadNearbyBroadcasts() }
             }
         }
 
         func startCountdown() {
             timer?.invalidate() // Ensure any existing timer is stopped
             timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-                guard let self = self, let end = self.broadcastEndTime else { return }
-                let remaining = Int(end.timeIntervalSinceNow)
-                if remaining <= 0 {
-                    self.stopBroadcast()
-                } else {
-                    self.countdown = String(format: "%02d:%02d", remaining / 60, remaining % 60)
+                guard let self = self else { return }
+                Task { @MainActor in
+                    guard let end = self.broadcastEndTime else { return }
+                    let remaining = Int(end.timeIntervalSinceNow)
+                    if remaining <= 0 {
+                        self.stopBroadcast()
+                    } else {
+                        self.countdown = String(format: "%02d:%02d", remaining / 60, remaining % 60)
+                    }
                 }
             }
         }
@@ -711,8 +721,11 @@ extension BroadcastView {
             let qry = CKQuery(recordType: "Broadcast", predicate: pred)
             database.perform(qry, inZoneWith: nil) { [weak self] (recs: [CKRecord]?, error: Error?) in
                 guard let self = self else { return }
-                DispatchQueue.main.async {
-                    if let error = error { print("Error loading broadcast status: \(error.localizedDescription)"); return }
+                Task { @MainActor in
+                    if let error = error {
+                        print("Error loading broadcast status: \(error.localizedDescription)")
+                        return
+                    }
                     if let activeRecord = recs?.first, let endTime = activeRecord["expiresAt"] as? Date, endTime > Date() {
                         self.isBroadcasting = true
                         self.broadcastEndTime = endTime
@@ -760,19 +773,21 @@ extension BroadcastView {
             }
             resetTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
                 guard let self = self else { return }
-                let remaining = Int(nextDate.timeIntervalSinceNow)
-                if remaining <= 0 {
-                    self.resetTimer?.invalidate()
-                    self.resetCountdown = ""
-                    self.loadBroadcastStatus() // Reload status as reset time has passed
-                } else if remaining >= 86400 { // More than a day
-                    let days = remaining / 86400
-                    let hours = (remaining % 86400) / 3600
-                    self.resetCountdown = "\(days)d \(hours)h"
-                } else { // Less than a day
-                    let hours = remaining / 3600
-                    let minutes = (remaining % 3600) / 60
-                    self.resetCountdown = "\(hours)h \(minutes)m"
+                Task { @MainActor in
+                    let remaining = Int(nextDate.timeIntervalSinceNow)
+                    if remaining <= 0 {
+                        self.resetTimer?.invalidate()
+                        self.resetCountdown = ""
+                        self.loadBroadcastStatus() // Reload status as reset time has passed
+                    } else if remaining >= 86400 { // More than a day
+                        let days = remaining / 86400
+                        let hours = (remaining % 86400) / 3600
+                        self.resetCountdown = "\(days)d \(hours)h"
+                    } else { // Less than a day
+                        let hours = remaining / 3600
+                        let minutes = (remaining % 3600) / 60
+                        self.resetCountdown = "\(hours)h \(minutes)m"
+                    }
                 }
             }
         }
@@ -845,27 +860,27 @@ extension BroadcastView {
                     dispatchGroup.enter()
                     processingQueue.async {
                         var broadcasterSetRadius = self.minRadius // Default
-                        if let cachedRadius = self.broadcasterRadiiCache[broadcastUserID] {
-                            broadcasterSetRadius = cachedRadius
-                            if distanceToBroadcast <= broadcasterSetRadius {
-                                DispatchQueue.main.async { // Append to annotations on main thread if it's a @Published array
+                        Task { @MainActor in
+                            if let cachedRadius = self.broadcasterRadiiCache[broadcastUserID] {
+                                broadcasterSetRadius = cachedRadius
+                                if distanceToBroadcast <= broadcasterSetRadius {
                                     newAnnotations.append(BroadcastAnnotation(id: record.recordID.recordName, coordinate: broadcastLocation.coordinate, message: broadcastMessage, age: broadcastAge, ethnicity: broadcastEthnicity))
                                 }
-                            }
-                            dispatchGroup.leave()
-                        } else {
-                            let broadcasterProfileID = CKRecord.ID(recordName: "\(broadcastUserID)_profile")
-                            self.database.fetch(withRecordID: broadcasterProfileID) { (broadcasterProfileRecord: CKRecord?, fetchError: Error?) in
-                                if let profileRec = broadcasterProfileRecord, let rad = profileRec["preferredRadius"] as? Double { // Changed to Double
-                                    broadcasterSetRadius = rad
-                                    DispatchQueue.main.async { self.broadcasterRadiiCache[broadcastUserID] = broadcasterSetRadius }
-                                }
-                                if distanceToBroadcast <= broadcasterSetRadius {
-                                     DispatchQueue.main.async {
-                                        newAnnotations.append(BroadcastAnnotation(id: record.recordID.recordName, coordinate: broadcastLocation.coordinate, message: broadcastMessage, age: broadcastAge, ethnicity: broadcastEthnicity))
-                                     }
-                                }
                                 dispatchGroup.leave()
+                            } else {
+                                let broadcasterProfileID = CKRecord.ID(recordName: "\(broadcastUserID)_profile")
+                                self.database.fetch(withRecordID: broadcasterProfileID) { (broadcasterProfileRecord: CKRecord?, fetchError: Error?) in
+                                    Task { @MainActor in
+                                        if let profileRec = broadcasterProfileRecord, let rad = profileRec["preferredRadius"] as? Double {
+                                            broadcasterSetRadius = rad
+                                            self.broadcasterRadiiCache[broadcastUserID] = broadcasterSetRadius
+                                        }
+                                        if distanceToBroadcast <= broadcasterSetRadius {
+                                            newAnnotations.append(BroadcastAnnotation(id: record.recordID.recordName, coordinate: broadcastLocation.coordinate, message: broadcastMessage, age: broadcastAge, ethnicity: broadcastEthnicity))
+                                        }
+                                        dispatchGroup.leave()
+                                    }
+                                }
                             }
                         }
                     }
@@ -1127,7 +1142,7 @@ struct BroadcastView: View {
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
             content.onReceiveWillEnterForeground() // Use content's method
         }
-        .onChange(of: storeManager.isSubscribed) { newIsSubscribedValue in // Monitor storeManager directly
+        .onChange(of: storeManager.isSubscribed) { _, newIsSubscribedValue in // Monitor storeManager directly
             content.onChangeOfSubscription(isSubscribed: newIsSubscribedValue) // Use content's method
         }
         .navigationTitle("Broadcast")
@@ -1206,7 +1221,7 @@ struct BroadcastView: View {
                     Slider(value: $content.selectedRadius, in: content.minRadiusPublic...content.maxRadiusSubscribedPublic, step: 10) { // Assuming public getters in Content
                         Text("Radius")
                     } minimumValueLabel: { Text("10mi") } maximumValueLabel: { Text("50mi") }
-                    .onChange(of: content.selectedRadius) { _ in
+                    .onChange(of: content.selectedRadius) { _, _ in
                         content.saveRadiusToCloudKit()
                         content.loadNearbyBroadcasts()
                     }
