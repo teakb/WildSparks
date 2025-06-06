@@ -1045,7 +1045,7 @@ struct ProfileView: View {
                 for i in 1...6 {
                     if let a = r["photo\(i)"] as? CKAsset,
                        let url = a.fileURL,
-                       let d = try? Data(contentsOf: url) {
+                       let d = try? Data(contentsOf: url, options: .mappedIfSafe) {
                         images.append(d)
                     }
                 }

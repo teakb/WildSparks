@@ -1262,8 +1262,7 @@ struct HomeView: View {
                     var image: UIImage? = nil
                     if let asset = rec["photo1"] as? CKAsset,
                        let url = asset.fileURL,
-                       let data = try? Data(contentsOf: url),
-                       let ui = UIImage(data: data) {
+                       let ui = UIImage(contentsOfFile: url.path) {
                         image = ui
                     }
 
@@ -1271,8 +1270,7 @@ struct HomeView: View {
                     for i in 1...6 {
                         if let asset = rec["photo\(i)"] as? CKAsset,
                            let url = asset.fileURL,
-                           let data = try? Data(contentsOf: url),
-                           let uiImage = UIImage(data: data) {
+                           let uiImage = UIImage(contentsOfFile: url.path) {
                             photos.append(uiImage)
                         }
                     }

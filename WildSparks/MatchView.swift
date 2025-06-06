@@ -228,8 +228,7 @@ struct MatchesView: View {
                         var img: UIImage?
                         if let asset = rec["photo1"] as? CKAsset,
                            let url = asset.fileURL,
-                           let data = try? Data(contentsOf: url),
-                           let ui = UIImage(data: data) {
+                           let ui = UIImage(contentsOfFile: url.path) {
                             img = ui
                         }
                         loaded.append(Match(id: uid, name: name, image: img))
@@ -568,8 +567,7 @@ struct ProfileDetailView: View {
                 photos = (1...6).compactMap { i in
                     guard let asset = rec["photo\(i)"] as? CKAsset,
                           let url = asset.fileURL,
-                          let d = try? Data(contentsOf: url),
-                          let ui = UIImage(data: d) else { return nil }
+                          let ui = UIImage(contentsOfFile: url.path) else { return nil }
                     return ui
                 }
             }
