@@ -564,13 +564,15 @@ extension BroadcastView {
             let recID = CKRecord.ID(recordName: "\(uid)_profile")
             database.fetch(withRecordID: recID) { [weak self] (record: CKRecord?, error: Error?) in
                 guard let self = self else { return }
-                var profileRecord: CKRecord
-                if let rec = record { profileRecord = rec }
-                else { profileRecord = CKRecord(recordType: "UserProfile", recordID: recID) } // Create if not exists
+                Task { @MainActor in
+                    var profileRecord: CKRecord
+                    if let rec = record { profileRecord = rec }
+                    else { profileRecord = CKRecord(recordType: "UserProfile", recordID: recID) } // Create if not exists
 
-                profileRecord["preferredRadius"] = NSNumber(value: self.selectedRadius) // Ensure it's NSNumber
-                self.database.save(profileRecord) { (savedRecord: CKRecord?, saveError: Error?) in
-                    if let saveError = saveError { print("Error saving radius: \(saveError.localizedDescription)") }
+                    profileRecord["preferredRadius"] = NSNumber(value: self.selectedRadius) // Ensure it's NSNumber
+                    self.database.save(profileRecord) { (savedRecord: CKRecord?, saveError: Error?) in
+                        if let saveError = saveError { print("Error saving radius: \(saveError.localizedDescription)") }
+                    }
                 }
             }
         }
@@ -645,9 +647,12 @@ extension BroadcastView {
                         print("Error saving broadcast: \(error.localizedDescription)")
                     } else {
                         print("Broadcast saved successfully with message: \(messageToSave)")
-                        self.mainAsyncAfter(1.0) {
-                            self.loadNearbyBroadcasts()
-                            self.loadBroadcastStatus()
+                        self.mainAsyncAfter(1.0) { [weak self] in
+                            guard let self = self else { return }
+                            Task { @MainActor in
+                                self.loadNearbyBroadcasts()
+                                self.loadBroadcastStatus()
+                            }
                         }
                         if !self.storeManager.isSubscribed {
                             UserDefaults.standard.set(Date(), forKey: "lastBroadcastDate")
@@ -797,28 +802,33 @@ extension BroadcastView {
             let now = Date()
             let queryPredicate = NSPredicate(format: "expiresAt > %@", now as CVarArg)
             let query = CKQuery(recordType: "Broadcast", predicate: queryPredicate)
+            // Capture preferences to avoid referencing actor-isolated state inside callbacks
+            let preferredAgeRange = self.profile.preferredAgeRange
+            let preferredEthnicities = self.profile.preferredEthnicities
+            let userSelectedRadius = self.selectedRadius
 
             database.perform(query, inZoneWith: nil) { [weak self] (records: [CKRecord]?, error: Error?) in
                 guard let self = self else { return }
-                
-                if let error = error {
-                    print("Error fetching broadcasts: \(error.localizedDescription)")
-                    Task { @MainActor in
-                        self.mainAsyncAfter(2.0) {
-                            self.isLoadingBroadcasts = false
-                            // self.loadNearbyBroadcasts() // Potential retry loop, be cautious
+                Task { @MainActor in
+                    if let error = error {
+                        print("Error fetching broadcasts: \(error.localizedDescription)")
+                        self.mainAsyncAfter(2.0) { [weak self] in
+                            guard let self = self else { return }
+                            Task { @MainActor in
+                                self.isLoadingBroadcasts = false
+                                // self.loadNearbyBroadcasts() // Potential retry loop, be cautious
+                            }
                         }
+                        return
                     }
-                    return
-                }
 
-                guard let fetchedRecords = records else {
-                    Task { @MainActor in self.isLoadingBroadcasts = false }
-                    return
-                }
+                    guard let fetchedRecords = records else {
+                        self.isLoadingBroadcasts = false
+                        return
+                    }
 
-                var newAnnotations: [BroadcastAnnotation] = []
-                let dispatchGroup = DispatchGroup()
+                    var newAnnotations: [BroadcastAnnotation] = []
+                    let dispatchGroup = DispatchGroup()
 
                 for record in fetchedRecords {
                     guard let broadcastLocation = record["location"] as? CLLocation,
@@ -839,15 +849,15 @@ extension BroadcastView {
                         continue
                     }
 
-                    // Filter by current user's preferences
-                    guard self.profile.preferredAgeRange.contains(broadcastAge) else { continue }
-                    if !self.profile.preferredEthnicities.isEmpty && !self.profile.preferredEthnicities.contains(broadcastEthnicity) {
+                    // Filter by current user's preferences using captured values
+                    guard preferredAgeRange.contains(broadcastAge) else { continue }
+                    if !preferredEthnicities.isEmpty && !preferredEthnicities.contains(broadcastEthnicity) {
                         continue
                     }
 
                     // Filter by current user's selected viewable radius
                     // self.selectedRadius is already capped by subscription status elsewhere (e.g., in loadSavedPreferences, UI controls).
-                    guard distanceToBroadcast <= self.selectedRadius else { continue }
+                    guard distanceToBroadcast <= userSelectedRadius else { continue }
 
                     // Check against broadcaster's set radius
                     dispatchGroup.enter()
@@ -909,8 +919,11 @@ extension BroadcastView {
                     print("Error simulating broadcast: \(error.localizedDescription)")
                 } else {
                     print("Simulated broadcast saved.")
-                    Task { @MainActor in
-                        self.mainAsyncAfter(1.0) { self.loadNearbyBroadcasts() }
+                    self.mainAsyncAfter(1.0) { [weak self] in
+                        guard let self = self else { return }
+                        Task { @MainActor in
+                            self.loadNearbyBroadcasts()
+                        }
                     }
                 }
             }
