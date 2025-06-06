@@ -934,6 +934,9 @@ extension BroadcastView {
     }
 }
 
+// Close the BroadcastView extension
+}
+
 
 // MARK: - Broadcast View
 struct BroadcastView: View {
