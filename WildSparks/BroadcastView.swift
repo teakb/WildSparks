@@ -913,13 +913,14 @@ extension BroadcastView {
             rec["ethnicity"] = "Other" as NSString
             rec["radius"] = NSNumber(value: maxRadiusSubscribed)
 
+            let schedule = self.mainAsyncAfter
             database.save(rec) { [weak self] (savedRecord: CKRecord?, error: Error?) in
                 guard let self = self else { return }
                 if let error {
                     print("Error simulating broadcast: \(error.localizedDescription)")
                 } else {
                     print("Simulated broadcast saved.")
-                    self.mainAsyncAfter(1.0) { [weak self] in
+                    schedule(1.0) { [weak self] in
                         guard let self = self else { return }
                         Task { @MainActor in
                             self.loadNearbyBroadcasts()
