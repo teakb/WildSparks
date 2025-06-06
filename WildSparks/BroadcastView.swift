@@ -895,6 +895,7 @@ extension BroadcastView {
                 }
             }
         }
+        }
         
         func containsBannedWord(message: String) -> Bool {
             let messageLowercased = message.lowercased()
@@ -936,7 +937,6 @@ extension BroadcastView {
 }
 
 // Close the BroadcastView extension
-}
 
 
 // MARK: - Broadcast View
